@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, X, Zap } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
+import lion3D from '../assets/leo-lion-3d.png'
 
 const navLinks = [
   { label: 'Home', to: '/' },
@@ -24,17 +25,19 @@ export default function Navbar() {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? 'bg-gray-950/95 backdrop-blur-md shadow-lg shadow-black/20' : 'bg-transparent'
+        scrolled ? 'bg-[#0D0B07]/95 backdrop-blur-md shadow-lg shadow-black/20 border-b border-[var(--border-gold)]' : 'bg-transparent'
       }`}
     >
       <nav className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-            <Zap size={16} className="text-white" />
-          </div>
-          <span className="font-bold text-lg text-white">
-            Leo<span className="text-violet-400">vex</span>
+          <img
+            src={lion3D}
+            alt="Leovex lion logo"
+            className="w-9 h-9 rounded-lg object-cover border border-[var(--border-gold)] shadow-[0_0_10px_rgba(245,200,66,0.3)]"
+          />
+          <span className="text-[1.05rem] font-semibold tracking-[0.14em] gradient-text" style={{ fontFamily: 'var(--font-display)' }}>
+            LEOVEX
           </span>
         </Link>
 
@@ -46,8 +49,8 @@ export default function Navbar() {
               to={link.to}
               className={`text-sm font-medium transition-colors ${
                 location.pathname === link.to
-                  ? 'text-violet-400'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'text-[var(--leo-amber)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {link.label}
@@ -57,7 +60,7 @@ export default function Navbar() {
             href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            className="leo-btn-primary px-4 py-2 rounded-lg text-sm"
           >
             Enroll Now
           </a>
@@ -65,7 +68,7 @@ export default function Navbar() {
 
         {/* Mobile toggle */}
         <button
-          className="md:hidden text-gray-300 hover:text-white"
+          className="md:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           onClick={() => setOpen(!open)}
           aria-label="Toggle menu"
         >
@@ -75,13 +78,13 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden bg-gray-950/98 backdrop-blur-md border-t border-gray-800 px-4 py-4 flex flex-col gap-4">
+        <div className="md:hidden bg-[#0D0B07]/98 backdrop-blur-md border-t border-[var(--border-gold)] px-4 py-4 flex flex-col gap-4">
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
               className={`text-sm font-medium py-2 transition-colors ${
-                location.pathname === link.to ? 'text-violet-400' : 'text-gray-300'
+                location.pathname === link.to ? 'text-[var(--leo-amber)]' : 'text-[var(--text-secondary)]'
               }`}
             >
               {link.label}
@@ -91,7 +94,7 @@ export default function Navbar() {
             href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-3 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold text-center"
+            className="leo-btn-primary px-4 py-3 rounded-lg text-sm text-center"
           >
             Enroll Now
           </a>

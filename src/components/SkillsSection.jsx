@@ -3,30 +3,30 @@ import SectionHeading from './SectionHeading'
 const skillGroups = [
   {
     category: 'Frontend',
-    color: 'from-cyan-500/20 to-cyan-500/5',
-    border: 'border-cyan-500/30',
-    badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    color: 'from-[rgba(201,146,42,0.2)] to-[rgba(201,146,42,0.05)]',
+    border: 'border-[var(--border-gold)]',
+    badge: 'bg-[rgba(201,146,42,0.12)] text-[var(--leo-amber)] border-[var(--border-gold)]',
     skills: ['React', 'HTML5', 'CSS3', 'JavaScript (ES6+)'],
   },
   {
     category: 'Backend',
-    color: 'from-green-500/20 to-green-500/5',
-    border: 'border-green-500/30',
-    badge: 'bg-green-500/10 text-green-400 border-green-500/20',
+    color: 'from-[rgba(245,200,66,0.2)] to-[rgba(245,200,66,0.05)]',
+    border: 'border-[var(--border-gold)]',
+    badge: 'bg-[rgba(245,200,66,0.12)] text-[var(--leo-sunlit)] border-[var(--border-gold)]',
     skills: ['Node.js', 'REST APIs', 'Express.js'],
   },
   {
     category: 'AI & Agents',
-    color: 'from-violet-500/20 to-violet-500/5',
-    border: 'border-violet-500/30',
-    badge: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+    color: 'from-[rgba(155,110,26,0.25)] to-[rgba(122,79,16,0.1)]',
+    border: 'border-[var(--border-gold)]',
+    badge: 'bg-[rgba(155,110,26,0.2)] text-[var(--leo-amber)] border-[var(--border-gold)]',
     skills: ['AI Chatbots', 'AI Agents', 'LangChain', 'LangGraph', 'n8n Workflows'],
   },
 ]
 
 export default function SkillsSection() {
   return (
-    <section id="skills" className="py-24 px-4 bg-gray-950/50">
+    <section id="skills" className="py-24 px-4 leo-section-card">
       <div className="max-w-6xl mx-auto">
         <SectionHeading
           tag="Skills Covered"
@@ -40,7 +40,7 @@ export default function SkillsSection() {
               key={category}
               className={`rounded-2xl bg-gradient-to-b ${color} border ${border} p-6 card-hover`}
             >
-              <h3 className="text-white font-bold text-lg mb-5">{category}</h3>
+              <h3 className="text-[var(--text-primary)] font-bold text-lg mb-5" style={{ fontFamily: 'var(--font-display)' }}>{category}</h3>
               <div className="flex flex-wrap gap-2">
                 {skills.map((s) => (
                   <span

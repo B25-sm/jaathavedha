@@ -2,9 +2,9 @@ export default function Button({ children, variant = 'primary', href, onClick, c
   const base = 'inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer'
 
   const variants = {
-    primary: 'bg-gradient-to-r from-violet-600 to-cyan-600 text-white hover:opacity-90 hover:scale-[1.02] shadow-lg shadow-violet-500/20',
-    secondary: 'border border-gray-700 text-gray-200 hover:border-violet-500 hover:text-violet-400 bg-transparent',
-    whatsapp: 'bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/20 hover:scale-[1.02]',
+    primary: 'leo-btn-primary hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(201,146,42,0.5)]',
+    secondary: 'leo-btn-secondary',
+    whatsapp: 'leo-btn-whatsapp hover:brightness-110 shadow-lg shadow-green-500/20',
   }
 
   const cls = `${base} ${variants[variant]} ${className}`
