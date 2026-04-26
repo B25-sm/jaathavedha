@@ -34,7 +34,7 @@ export default function Navbar() {
             <Zap size={16} className="text-white" />
           </div>
           <span className="font-bold text-lg text-white">
-            Sai<span className="text-violet-400">Mahendra</span>
+            Leo<span className="text-violet-400">vex</span>
           </span>
         </Link>
 
@@ -54,7 +54,7 @@ export default function Navbar() {
             </Link>
           ))}
           <a
-            href="https://wa.me/9063443115?text=Hi%20Sai%2C%20I%20want%20to%20enroll!"
+            href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
@@ -88,7 +88,7 @@ export default function Navbar() {
             </Link>
           ))}
           <a
-            href="https://wa.me/9063443115?text=Hi%20Sai%2C%20I%20want%20to%20enroll!"
+            href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-3 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 text-white text-sm font-semibold text-center"

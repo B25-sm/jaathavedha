@@ -17,7 +17,7 @@ const programs = [
       { label: 'Community Access', desc: 'Join a group of learners for support and accountability.' },
     ],
     outcomes: ['Understand React basics', 'Build a mini project', 'Know your next steps'],
-    whatsapp: 'Hi Sai, I want to enroll in the Foundation program!',
+    whatsapp: 'Hi Leovex, I want to enroll in the Foundation program!',
   },
   {
     tier: 'Builder',
@@ -35,7 +35,7 @@ const programs = [
       { label: 'WhatsApp Support', desc: 'Ask questions and get answers whenever you are stuck.' },
     ],
     outcomes: ['Build 2\u20133 real projects', 'Integrate APIs and AI', 'Debug confidently'],
-    whatsapp: 'Hi Sai, I want to enroll in the Builder program!',
+    whatsapp: 'Hi Leovex, I want to enroll in the Builder program!',
   },
   {
     tier: 'Professional',
@@ -50,10 +50,10 @@ const programs = [
       { label: 'n8n Automation', desc: 'Automate workflows and integrate tools without code.' },
       { label: 'Portfolio + Resume', desc: 'Build a portfolio that stands out and a resume that gets calls.' },
       { label: 'Interview Preparation', desc: 'Mock interviews, common questions, and how to answer them.' },
-      { label: '1-on-1 Mentorship', desc: 'Direct sessions with Sai Mahendra for personalized guidance.' },
+      { label: '1-on-1 Mentorship', desc: 'Direct sessions with Leovex for personalized guidance.' },
     ],
     outcomes: ['Job-ready portfolio', 'AI + Fullstack skills', 'Interview confidence'],
-    whatsapp: 'Hi Sai, I want to enroll in the Professional program!',
+    whatsapp: 'Hi Leovex, I want to enroll in the Professional program!',
   },
 ]
 
@@ -147,12 +147,12 @@ export default function Programs() {
         <div className="mt-16 text-center">
           <p className="text-gray-400 mb-4">Not sure which program to pick?</p>
           <Button
-            href="https://wa.me/9063443115?text=Hi%20Sai%2C%20I%20need%20help%20choosing%20a%20program!"
+            href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20need%20help%20choosing%20a%20program!"
             variant="whatsapp"
             className="text-base px-8 py-4"
           >
             <MessageCircle size={18} />
-            Ask Sai on WhatsApp
+            Ask Leovex on WhatsApp
           </Button>
         </div>
       </div>

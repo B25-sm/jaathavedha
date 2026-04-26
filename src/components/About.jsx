@@ -25,7 +25,7 @@ export default function About() {
       <div className="max-w-6xl mx-auto">
         <SectionHeading
           tag="About the Trainer"
-          title="Meet Sai Mahendra"
+          title="Meet Leovex"
           subtitle="A hands-on trainer focused on teaching what the industry actually uses — not just theory."
         />
 
@@ -42,7 +42,7 @@ export default function About() {
               ))}
             </div>
             <p className="text-gray-400 leading-relaxed">
-              With over 2 years of training experience, Sai Mahendra specializes in helping college students and beginners break into Fullstack development and AI engineering. Every program is built around real projects, clear explanations, and practical outcomes — no fluff.
+              With over 2 years of training experience, Leovex specializes in helping college students and beginners break into Fullstack development and AI engineering. Every program is built around real projects, clear explanations, and practical outcomes — no fluff.
             </p>
           </div>
 

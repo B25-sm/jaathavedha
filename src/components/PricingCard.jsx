@@ -2,7 +2,7 @@ import { Check } from 'lucide-react'
 import Button from './Button'
 
 export default function PricingCard({ tier, price, features, cta, highlighted = false }) {
-  const whatsappMsg = encodeURIComponent(`Hi Sai, I want to enroll in the ${tier} program!`)
+  const whatsappMsg = encodeURIComponent(`Hi Leovex, I want to enroll in the ${tier} program!`)
 
   return (
     <div

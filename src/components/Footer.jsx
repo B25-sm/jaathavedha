@@ -13,7 +13,7 @@ export default function Footer() {
                 <Zap size={16} className="text-white" />
               </div>
               <span className="font-bold text-lg text-white">
-                Sai<span className="text-violet-400">Mahendra</span>
+                Leo<span className="text-violet-400">vex</span>
               </span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
@@ -64,7 +64,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-800 pt-6 text-center text-gray-500 text-sm">
-          © {new Date().getFullYear()} Sai Mahendra. All rights reserved.
+          © {new Date().getFullYear()} Leovex. All rights reserved.
         </div>
       </div>
     </footer>

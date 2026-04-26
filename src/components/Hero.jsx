@@ -41,7 +41,7 @@ export default function Hero() {
           </Link>
           <Button
             variant="whatsapp"
-            href="https://wa.me/9063443115?text=Hi%20Sai%2C%20I%20want%20to%20enroll!"
+            href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
             className="text-base px-8 py-4"
           >
             <MessageCircle size={18} />

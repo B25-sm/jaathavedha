@@ -30,7 +30,7 @@ export default function Contact() {
     }
     // Build WhatsApp message as fallback / primary action
     const msg = encodeURIComponent(
-      `Hi Sai!\nName: ${form.name}\nEmail: ${form.email}\nPhone: ${form.phone}\nMessage: ${form.message}`
+      `Hi Leovex!\nName: ${form.name}\nEmail: ${form.email}\nPhone: ${form.phone}\nMessage: ${form.message}`
     )
     window.open(`https://wa.me/9063443115?text=${msg}`, '_blank')
     setSubmitted(true)
@@ -42,7 +42,7 @@ export default function Contact() {
         <SectionHeading
           tag="Contact"
           title="Get in Touch"
-          subtitle="Have questions about a program? Reach out and Sai will get back to you quickly."
+          subtitle="Have questions about a program? Reach out and Leovex will get back to you quickly."
         />
 
         <div className="grid md:grid-cols-2 gap-10">
@@ -53,7 +53,7 @@ export default function Contact() {
                 <CheckCircle size={48} className="text-green-400 mb-4" />
                 <h3 className="text-white text-xl font-bold mb-2">Message Sent!</h3>
                 <p className="text-gray-400 text-sm">
-                  Your message was sent via WhatsApp. Sai will respond shortly.
+                  Your message was sent via WhatsApp. Leovex will respond shortly.
                 </p>
                 <button
                   onClick={() => { setSubmitted(false); setForm({ name: '', email: '', phone: '', message: '' }) }}
@@ -131,7 +131,7 @@ export default function Contact() {
                     rows={4}
                     value={form.message}
                     onChange={handleChange}
-                    placeholder="Tell Sai what you're looking for..."
+                    placeholder="Tell Leovex what you're looking for..."
                     className={`w-full bg-gray-800 border rounded-xl px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 transition resize-none ${
                       errors.message ? 'border-red-500' : 'border-gray-700'
                     }`}
@@ -191,7 +191,7 @@ export default function Contact() {
                 Know which program you want? Skip the form and enroll directly via WhatsApp.
               </p>
               <Button
-                href="https://wa.me/9063443115?text=Hi%20Sai%2C%20I%20want%20to%20enroll!"
+                href="https://wa.me/9063443115?text=Hi%20Leovex%2C%20I%20want%20to%20enroll!"
                 variant="whatsapp"
                 className="w-full"
               >
