@@ -1,0 +1,182 @@
+@keyframes mane-expand {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes leo-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes eye-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px #f5c842);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px #f5c842);
+  }
+}
+
+@keyframes shimmer-sweep {
+  from {
+    background-position: -200% center;
+  }
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes heading-slide-in {
+  from {
+    transform: translateX(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes underline-draw {
+  from {
+    width: 0;
+  }
+  to {
+    width: 64px;
+  }
+}
+
+@keyframes crown-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(245, 200, 66, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 200, 66, 1);
+  }
+}
+
+@keyframes trail-fade {
+  from {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes leo-float {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--p-opacity, 0.3);
+  }
+  90% {
+    opacity: var(--p-opacity, 0.3);
+  }
+  100% {
+    transform: translateY(-80vh);
+    opacity: 0;
+  }
+}
+
+@keyframes svg-draw {
+  from {
+    stroke-dashoffset: 800;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes leo-loader-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+@keyframes leo-depth-float {
+  0%,
+  100% {
+    transform: perspective(900px) rotateY(-8deg) rotateX(4deg) translateY(0);
+  }
+  50% {
+    transform: perspective(900px) rotateY(8deg) rotateX(-3deg) translateY(-10px);
+  }
+}
+
+@keyframes leo-orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lion-shimmer {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 12px rgba(245, 200, 66, 0.2)) saturate(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(245, 200, 66, 0.4)) saturate(1.08);
+  }
+}
+
+@keyframes skill-chip-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes leo-card-flip {
+  0%,
+  22% {
+    transform: rotateY(0deg);
+  }
+  28%,
+  72% {
+    transform: rotateY(180deg);
+  }
+  78%,
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

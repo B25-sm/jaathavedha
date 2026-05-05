@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@import "./styles/leo-tokens.css";
+@import "./styles/leo-animations.css";
+@import "./styles/leo-utilities.css";
+
+@theme {
+  --color-gray-950: #030712;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-gold);
+}
