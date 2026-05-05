@@ -1,0 +1,201 @@
+# Resource Quotas for the platform namespace
+# Limits total resource consumption across all pods
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: platform-compute-quota
+  namespace: sai-mahendra-platform
+spec:
+  hard:
+    # CPU limits
+    requests.cpu: "10"
+    limits.cpu: "20"
+    
+    # Memory limits
+    requests.memory: "20Gi"
+    limits.memory: "40Gi"
+    
+    # Pod limits
+    pods: "100"
+    
+    # Service limits
+    services: "20"
+    services.loadbalancers: "2"
+    
+    # Storage limits
+    persistentvolumeclaims: "20"
+    requests.storage: "100Gi"
+
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: platform-object-quota
+  namespace: sai-mahendra-platform
+spec:
+  hard:
+    # Object count limits
+    configmaps: "50"
+    secrets: "50"
+    services: "20"
+    
+    # Deployment limits
+    count/deployments.apps: "20"
+    count/statefulsets.apps: "10"
+    count/jobs.batch: "50"
+    count/cronjobs.batch: "10"
+
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: platform-limit-range
+  namespace: sai-mahendra-platform
+spec:
+  limits:
+  # Container limits
+  - type: Container
+    max:
+      cpu: "2"
+      memory: "4Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+    default:
+      cpu: "500m"
+      memory: "512Mi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    maxLimitRequestRatio:
+      cpu: "4"
+      memory: "4"
+  
+  # Pod limits
+  - type: Pod
+    max:
+      cpu: "4"
+      memory: "8Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+  
+  # PVC limits
+  - type: PersistentVolumeClaim
+    max:
+      storage: "10Gi"
+    min:
+      storage: "1Gi"
+
+---
+# Network Policies for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: sai-mahendra-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: sai-mahendra-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-traffic
+  namespace: sai-mahendra-platform
+spec:
+  podSelector:
+    matchLabels:
+      tier: gateway
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: sai-mahendra-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: sai-mahendra-monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 10254
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: sai-mahendra-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-apis
+  namespace: sai-mahendra-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80

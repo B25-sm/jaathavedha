@@ -1,0 +1,354 @@
+# Default values for sai-mahendra-platform
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration
+global:
+  environment: production
+  domain: saimahendra.com
+  imageRegistry: docker.io/saimahendra
+  imagePullPolicy: IfNotPresent
+  namespace: sai-mahendra-platform
+
+# Image tags for all services
+images:
+  userManagement:
+    repository: user-management
+    tag: latest
+  courseManagement:
+    repository: course-management
+    tag: latest
+  payment:
+    repository: payment
+    tag: latest
+  contact:
+    repository: contact
+    tag: latest
+  contentManagement:
+    repository: content-management
+    tag: latest
+  analytics:
+    repository: analytics
+    tag: latest
+  notification:
+    repository: notification
+    tag: latest
+  adminPanel:
+    repository: admin-panel
+    tag: latest
+  apiGateway:
+    repository: api-gateway
+    tag: latest
+  pwa:
+    repository: pwa
+    tag: latest
+  videoConferencing:
+    repository: video-conferencing
+    tag: latest
+  calendarIntegration:
+    repository: calendar-integration
+    tag: latest
+
+# Service configurations
+services:
+  userManagement:
+    enabled: true
+    replicas: 3
+    port: 3001
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  courseManagement:
+    enabled: true
+    replicas: 3
+    port: 3002
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  payment:
+    enabled: true
+    replicas: 3
+    port: 3003
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  contact:
+    enabled: true
+    replicas: 2
+    port: 3004
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  contentManagement:
+    enabled: true
+    replicas: 2
+    port: 3005
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  analytics:
+    enabled: true
+    replicas: 2
+    port: 3006
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  notification:
+    enabled: true
+    replicas: 2
+    port: 3007
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  adminPanel:
+    enabled: true
+    replicas: 2
+    port: 3008
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  apiGateway:
+    enabled: true
+    replicas: 3
+    port: 3000
+    serviceType: LoadBalancer
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  pwa:
+    enabled: true
+    replicas: 2
+    port: 3009
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  videoConferencing:
+    enabled: true
+    replicas: 2
+    port: 3010
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+  
+  calendarIntegration:
+    enabled: true
+    replicas: 2
+    port: 3011
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: api.saimahendra.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway
+    - host: admin.saimahendra.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: admin-panel
+  tls:
+    - secretName: sai-mahendra-tls
+      hosts:
+        - api.saimahendra.com
+        - admin.saimahendra.com
+
+# Service Mesh (Istio) configuration
+serviceMesh:
+  enabled: true
+  mtls:
+    mode: STRICT
+  trafficManagement:
+    enabled: true
+  circuitBreaker:
+    enabled: true
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  jaeger:
+    enabled: true
+
+# Database configuration (external)
+database:
+  postgres:
+    host: postgres.sai-mahendra-platform.svc.cluster.local
+    port: 5432
+    database: saimahendra
+  mongodb:
+    host: mongodb.sai-mahendra-platform.svc.cluster.local
+    port: 27017
+    database: saimahendra
+  redis:
+    host: redis.sai-mahendra-platform.svc.cluster.local
+    port: 6379
+
+# Security configuration
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  networkPolicies:
+    enabled: true
+
+# Resource quotas
+resourceQuotas:
+  enabled: true
+  limits:
+    cpu: "20"
+    memory: "40Gi"
+  requests:
+    cpu: "10"
+    memory: "20Gi"
+
+# Pod Disruption Budgets
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

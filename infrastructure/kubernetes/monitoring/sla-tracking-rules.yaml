@@ -1,0 +1,313 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-sla-rules
+  namespace: monitoring
+data:
+  sla-rules.yaml: |
+    groups:
+      # SLA Tracking Rules
+      - name: sla_tracking
+        interval: 1m
+        rules:
+          # API Availability SLA (99.9% uptime target)
+          - record: sla:api_availability:ratio_rate5m
+            expr: |
+              (
+                sum(rate(http_requests_total{namespace="sai-mahendra"}[5m]))
+                -
+                sum(rate(http_requests_total{namespace="sai-mahendra",status=~"5.."}[5m]))
+              )
+              /
+              sum(rate(http_requests_total{namespace="sai-mahendra"}[5m]))
+          
+          # API Availability SLA (1 hour window)
+          - record: sla:api_availability:ratio_rate1h
+            expr: |
+              (
+                sum(rate(http_requests_total{namespace="sai-mahendra"}[1h]))
+                -
+                sum(rate(http_requests_total{namespace="sai-mahendra",status=~"5.."}[1h]))
+              )
+              /
+              sum(rate(http_requests_total{namespace="sai-mahendra"}[1h]))
+          
+          # API Availability SLA (24 hour window)
+          - record: sla:api_availability:ratio_rate24h
+            expr: |
+              (
+                sum(rate(http_requests_total{namespace="sai-mahendra"}[24h]))
+                -
+                sum(rate(http_requests_total{namespace="sai-mahendra",status=~"5.."}[24h]))
+              )
+              /
+              sum(rate(http_requests_total{namespace="sai-mahendra"}[24h]))
+          
+          # API Response Time SLA (95th percentile < 200ms)
+          - record: sla:api_latency:p95_5m
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_request_duration_seconds_bucket{namespace="sai-mahendra"}[5m])) by (le, service)
+              )
+          
+          # API Response Time SLA (99th percentile < 500ms)
+          - record: sla:api_latency:p99_5m
+            expr: |
+              histogram_quantile(0.99,
+                sum(rate(http_request_duration_seconds_bucket{namespace="sai-mahendra"}[5m])) by (le, service)
+              )
+          
+          # Service Uptime (per service)
+          - record: sla:service_uptime:ratio_rate5m
+            expr: |
+              avg_over_time(up{namespace="sai-mahendra"}[5m])
+          
+          # Database Query Performance SLA (average < 100ms)
+          - record: sla:database_query:avg_latency_5m
+            expr: |
+              rate(pg_stat_statements_total_exec_time[5m]) / rate(pg_stat_statements_calls[5m])
+          
+          # Cache Hit Rate SLA (> 80%)
+          - record: sla:cache_hit_rate:ratio_5m
+            expr: |
+              rate(redis_keyspace_hits_total[5m]) / 
+              (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+          
+          # Payment Success Rate SLA (> 95%)
+          - record: sla:payment_success:ratio_5m
+            expr: |
+              rate(payment_transactions_total{status="success"}[5m]) /
+              rate(payment_transactions_total[5m])
+          
+          # Error Budget Calculation (monthly)
+          # Target: 99.9% uptime = 0.1% error budget = 43.2 minutes downtime per month
+          - record: sla:error_budget:remaining_ratio_30d
+            expr: |
+              1 - (
+                (1 - sla:api_availability:ratio_rate24h) / 0.001
+              )
+
+      # SLA Violation Alerts
+      - name: sla_violations
+        interval: 1m
+        rules:
+          # API Availability below SLA
+          - alert: SLAViolationAPIAvailability
+            expr: sla:api_availability:ratio_rate1h < 0.999
+            for: 5m
+            labels:
+              severity: critical
+              component: sla
+              sla_type: availability
+            annotations:
+              summary: "API availability below SLA target"
+              description: "API availability is {{ $value | humanizePercentage }} (target: 99.9%)"
+              impact: "Service Level Agreement violation - customer impact"
+              action: "Investigate service health and error rates immediately"
+          
+          # API Response Time above SLA (p95)
+          - alert: SLAViolationAPILatencyP95
+            expr: sla:api_latency:p95_5m > 0.2
+            for: 10m
+            labels:
+              severity: warning
+              component: sla
+              sla_type: latency
+            annotations:
+              summary: "API p95 latency above SLA target"
+              description: "API p95 latency is {{ $value }}s (target: 0.2s)"
+              impact: "User experience degradation"
+              action: "Check for slow queries, high load, or resource constraints"
+          
+          # API Response Time above SLA (p99)
+          - alert: SLAViolationAPILatencyP99
+            expr: sla:api_latency:p99_5m > 0.5
+            for: 10m
+            labels:
+              severity: warning
+              component: sla
+              sla_type: latency
+            annotations:
+              summary: "API p99 latency above SLA target"
+              description: "API p99 latency is {{ $value }}s (target: 0.5s)"
+              impact: "Significant user experience degradation for some requests"
+              action: "Investigate outlier requests and performance bottlenecks"
+          
+          # Service Uptime below SLA
+          - alert: SLAViolationServiceUptime
+            expr: sla:service_uptime:ratio_rate5m < 0.999
+            for: 5m
+            labels:
+              severity: critical
+              component: sla
+              sla_type: uptime
+            annotations:
+              summary: "Service uptime below SLA target"
+              description: "Service {{ $labels.service }} uptime is {{ $value | humanizePercentage }} (target: 99.9%)"
+              impact: "Service unavailability affecting users"
+              action: "Check service health, pod status, and recent deployments"
+          
+          # Database Query Performance above SLA
+          - alert: SLAViolationDatabaseLatency
+            expr: sla:database_query:avg_latency_5m > 100
+            for: 15m
+            labels:
+              severity: warning
+              component: sla
+              sla_type: database_performance
+            annotations:
+              summary: "Database query latency above SLA target"
+              description: "Average query latency is {{ $value }}ms (target: 100ms)"
+              impact: "Slow API responses due to database performance"
+              action: "Check slow queries, missing indexes, or database load"
+          
+          # Cache Hit Rate below SLA
+          - alert: SLAViolationCacheHitRate
+            expr: sla:cache_hit_rate:ratio_5m < 0.8
+            for: 15m
+            labels:
+              severity: warning
+              component: sla
+              sla_type: cache_performance
+            annotations:
+              summary: "Cache hit rate below SLA target"
+              description: "Cache hit rate is {{ $value | humanizePercentage }} (target: 80%)"
+              impact: "Increased database load and slower response times"
+              action: "Review cache strategy, TTL settings, and cache warming"
+          
+          # Payment Success Rate below SLA
+          - alert: SLAViolationPaymentSuccess
+            expr: sla:payment_success:ratio_5m < 0.95
+            for: 10m
+            labels:
+              severity: critical
+              component: sla
+              sla_type: payment_success
+            annotations:
+              summary: "Payment success rate below SLA target"
+              description: "Payment success rate is {{ $value | humanizePercentage }} (target: 95%)"
+              impact: "Revenue loss and customer dissatisfaction"
+              action: "Check payment gateway status, network connectivity, and error logs"
+          
+          # Error Budget Exhaustion Warning
+          - alert: SLAErrorBudgetLow
+            expr: sla:error_budget:remaining_ratio_30d < 0.2
+            for: 5m
+            labels:
+              severity: warning
+              component: sla
+              sla_type: error_budget
+            annotations:
+              summary: "SLA error budget running low"
+              description: "Only {{ $value | humanizePercentage }} of monthly error budget remaining"
+              impact: "Risk of SLA violation if issues continue"
+              action: "Prioritize stability over new features, defer risky deployments"
+          
+          # Error Budget Exhausted
+          - alert: SLAErrorBudgetExhausted
+            expr: sla:error_budget:remaining_ratio_30d <= 0
+            for: 1m
+            labels:
+              severity: critical
+              component: sla
+              sla_type: error_budget
+            annotations:
+              summary: "SLA error budget exhausted"
+              description: "Monthly error budget has been exhausted"
+              impact: "SLA violation - customer compensation may be required"
+              action: "Freeze deployments, focus on incident resolution and stability"
+
+      # Capacity Planning Alerts
+      - name: capacity_planning
+        interval: 5m
+        rules:
+          # Disk Space Running Low
+          - alert: DiskSpaceRunningLow
+            expr: |
+              (node_filesystem_avail_bytes{namespace="sai-mahendra"} / node_filesystem_size_bytes{namespace="sai-mahendra"}) < 0.2
+            for: 10m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "Disk space running low"
+              description: "Only {{ $value | humanizePercentage }} disk space available on {{ $labels.instance }}"
+              action: "Clean up old logs, increase disk size, or add storage"
+          
+          # Disk Space Critical
+          - alert: DiskSpaceCritical
+            expr: |
+              (node_filesystem_avail_bytes{namespace="sai-mahendra"} / node_filesystem_size_bytes{namespace="sai-mahendra"}) < 0.1
+            for: 5m
+            labels:
+              severity: critical
+              component: infrastructure
+            annotations:
+              summary: "Disk space critically low"
+              description: "Only {{ $value | humanizePercentage }} disk space available on {{ $labels.instance }}"
+              action: "Immediate action required - service may fail"
+          
+          # High Network Traffic
+          - alert: HighNetworkTraffic
+            expr: |
+              rate(node_network_receive_bytes_total{namespace="sai-mahendra"}[5m]) > 100000000
+            for: 15m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "High network traffic detected"
+              description: "Network receive rate is {{ $value | humanize }}B/s on {{ $labels.instance }}"
+              action: "Monitor for DDoS, check for data transfer issues"
+          
+          # Database Connection Pool Saturation
+          - alert: DatabaseConnectionPoolSaturation
+            expr: |
+              pg_stat_database_numbackends / pg_settings_max_connections > 0.9
+            for: 10m
+            labels:
+              severity: critical
+              component: database
+            annotations:
+              summary: "Database connection pool near saturation"
+              description: "Database connections at {{ $value | humanizePercentage }} of maximum"
+              action: "Increase max_connections or optimize connection usage"
+          
+          # Redis Memory Near Limit
+          - alert: RedisMemoryNearLimit
+            expr: |
+              redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+            for: 10m
+            labels:
+              severity: warning
+              component: cache
+            annotations:
+              summary: "Redis memory usage near limit"
+              description: "Redis memory at {{ $value | humanizePercentage }} of maximum"
+              action: "Increase Redis memory limit or review cache eviction policy"
+          
+          # Pod CPU Throttling
+          - alert: PodCPUThrottling
+            expr: |
+              rate(container_cpu_cfs_throttled_seconds_total{namespace="sai-mahendra"}[5m]) > 0.1
+            for: 10m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "Pod experiencing CPU throttling"
+              description: "Pod {{ $labels.pod }} is being CPU throttled"
+              action: "Increase CPU limits or optimize application performance"
+          
+          # Projected Disk Full
+          - alert: DiskWillFillIn4Hours
+            expr: |
+              predict_linear(node_filesystem_avail_bytes{namespace="sai-mahendra"}[1h], 4*3600) < 0
+            for: 5m
+            labels:
+              severity: warning
+              component: infrastructure
+            annotations:
+              summary: "Disk projected to fill within 4 hours"
+              description: "Disk on {{ $labels.instance }} will be full in approximately 4 hours"
+              action: "Take immediate action to free up space or increase capacity"

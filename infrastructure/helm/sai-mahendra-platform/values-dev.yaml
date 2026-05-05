@@ -1,0 +1,122 @@
+# Development environment values
+# Override default values for development environment
+
+global:
+  environment: development
+  domain: dev.saimahendra.com
+  imagePullPolicy: Always
+
+# Reduced replicas for dev
+services:
+  userManagement:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  courseManagement:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  payment:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  contact:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  contentManagement:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  analytics:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  notification:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  adminPanel:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  apiGateway:
+    replicas: 1
+    serviceType: ClusterIP
+    autoscaling:
+      enabled: false
+  
+  pwa:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  videoConferencing:
+    replicas: 1
+    autoscaling:
+      enabled: false
+  
+  calendarIntegration:
+    replicas: 1
+    autoscaling:
+      enabled: false
+
+# Ingress configuration for dev
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+  hosts:
+    - host: api.dev.saimahendra.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway
+    - host: admin.dev.saimahendra.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: admin-panel
+  tls:
+    - secretName: sai-mahendra-dev-tls
+      hosts:
+        - api.dev.saimahendra.com
+        - admin.dev.saimahendra.com
+
+# Service Mesh - Permissive mode for dev
+serviceMesh:
+  enabled: true
+  mtls:
+    mode: PERMISSIVE
+
+# Monitoring - reduced resources
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  jaeger:
+    enabled: false
+
+# Resource quotas - reduced for dev
+resourceQuotas:
+  enabled: true
+  limits:
+    cpu: "10"
+    memory: "20Gi"
+  requests:
+    cpu: "5"
+    memory: "10Gi"
+
+# Pod Disruption Budgets - disabled for dev
+podDisruptionBudget:
+  enabled: false

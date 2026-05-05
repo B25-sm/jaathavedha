@@ -1,0 +1,277 @@
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      rollback_to:
+        description: 'Version to rollback to (commit SHA or tag)'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+env:
+  KUBECTL_VERSION: '1.28.0'
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.validate.outputs.approved }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate rollback target
+        id: validate
+        run: |
+          # Check if the target version exists
+          if git rev-parse "${{ github.event.inputs.rollback_to }}" >/dev/null 2>&1; then
+            echo "approved=true" >> $GITHUB_OUTPUT
+            echo "✅ Rollback target ${{ github.event.inputs.rollback_to }} is valid"
+          else
+            echo "approved=false" >> $GITHUB_OUTPUT
+            echo "❌ Rollback target ${{ github.event.inputs.rollback_to }} not found"
+            exit 1
+          fi
+
+      - name: Get current deployment version
+        run: |
+          echo "Current version in ${{ github.event.inputs.environment }}: $(git describe --tags --always)"
+          echo "Rollback target: ${{ github.event.inputs.rollback_to }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+
+  execute-rollback:
+    name: Execute Rollback
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.approved == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code at rollback target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.rollback_to }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets[format('AWS_ACCESS_KEY_ID_{0}', upper(github.event.inputs.environment))] }}
+          aws-secret-access-key: ${{ secrets[format('AWS_SECRET_ACCESS_KEY_{0}', upper(github.event.inputs.environment))] }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-${{ github.event.inputs.environment }} --region us-east-1
+
+      - name: Create rollback backup
+        run: |
+          # Backup current state before rollback
+          kubectl get all -n ${{ github.event.inputs.environment }} -o yaml > rollback-backup-$(date +%Y%m%d-%H%M%S).yaml
+          aws s3 cp rollback-backup-*.yaml s3://sai-mahendra-backups/rollbacks/
+
+      - name: Scale down current deployment
+        run: |
+          # Gradually scale down current deployment
+          for deployment in $(kubectl get deployments -n ${{ github.event.inputs.environment }} -o name); do
+            echo "Scaling down $deployment"
+            kubectl scale $deployment -n ${{ github.event.inputs.environment }} --replicas=0
+          done
+
+      - name: Deploy rollback version
+        run: |
+          export IMAGE_TAG="${{ github.event.inputs.rollback_to }}"
+          
+          # Apply rollback deployment
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            envsubst < "$file" | kubectl apply -n ${{ github.event.inputs.environment }} -f -
+          done
+
+      - name: Wait for rollback deployment
+        run: |
+          echo "Waiting for rollback deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=10m \
+            deployment/api-gateway \
+            deployment/user-management \
+            deployment/course-management \
+            deployment/payment \
+            -n ${{ github.event.inputs.environment }}
+
+      - name: Verify rollback
+        run: |
+          sleep 30
+          
+          # Health check
+          if [ "${{ github.event.inputs.environment }}" == "production" ]; then
+            curl -f https://api.saimahendra.com/health || exit 1
+          elif [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            curl -f https://staging.saimahendra.com/health || exit 1
+          else
+            curl -f https://dev.saimahendra.com/health || exit 1
+          fi
+
+      - name: Run smoke tests
+        run: |
+          cd backend
+          npm ci
+          npm run test:smoke
+        env:
+          TEST_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.saimahendra.com' || format('https://{0}.saimahendra.com', github.event.inputs.environment) }}
+
+      - name: Clean up failed deployment
+        if: success()
+        run: |
+          # Remove any failed deployment artifacts
+          kubectl delete pods --field-selector=status.phase=Failed -n ${{ github.event.inputs.environment }}
+
+      - name: Create rollback incident report
+        if: always()
+        run: |
+          cat > rollback-report.md << EOF
+          # Rollback Incident Report
+          
+          **Environment:** ${{ github.event.inputs.environment }}
+          **Rollback Target:** ${{ github.event.inputs.rollback_to }}
+          **Executed By:** ${{ github.actor }}
+          **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Reason:** ${{ github.event.inputs.reason }}
+          **Status:** ${{ job.status }}
+          
+          ## Actions Taken
+          1. Validated rollback target
+          2. Created backup of current state
+          3. Scaled down current deployment
+          4. Deployed rollback version
+          5. Verified health checks
+          6. Ran smoke tests
+          
+          ## Next Steps
+          - [ ] Investigate root cause of issue
+          - [ ] Fix underlying problem
+          - [ ] Plan re-deployment
+          - [ ] Update runbooks if needed
+          EOF
+          
+          aws s3 cp rollback-report.md s3://sai-mahendra-backups/rollbacks/report-$(date +%Y%m%d-%H%M%S).md
+
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            🚨 Emergency Rollback Executed
+            Environment: ${{ github.event.inputs.environment }}
+            Target: ${{ github.event.inputs.rollback_to }}
+            Reason: ${{ github.event.inputs.reason }}
+            Status: ${{ job.status }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+
+      - name: Create post-mortem issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Post-Mortem: Rollback in ${{ github.event.inputs.environment }}`,
+              body: `## Rollback Details
+              
+              **Environment:** ${{ github.event.inputs.environment }}
+              **Rollback Target:** ${{ github.event.inputs.rollback_to }}
+              **Executed By:** ${{ github.actor }}
+              **Reason:** ${{ github.event.inputs.reason }}
+              **Status:** ${{ job.status }}
+              
+              ## Investigation Required
+              
+              - [ ] Root cause analysis
+              - [ ] Timeline of events
+              - [ ] Impact assessment
+              - [ ] Prevention measures
+              - [ ] Documentation updates
+              
+              ## Action Items
+              
+              - [ ] Fix underlying issue
+              - [ ] Update monitoring/alerting
+              - [ ] Review deployment process
+              - [ ] Update runbooks
+              
+              cc: @team-leads`,
+              labels: ['incident', 'post-mortem', 'high-priority']
+            });
+            
+            console.log(`Created post-mortem issue #${issue.data.number}`);
+
+  rollback-database:
+    name: Rollback Database (if needed)
+    runs-on: ubuntu-latest
+    needs: execute-rollback
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production-database
+    steps:
+      - name: Manual approval required
+        run: |
+          echo "⚠️  Database rollback requires manual approval"
+          echo "Please review the database changes before proceeding"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: us-east-1
+
+      - name: List available database snapshots
+        run: |
+          echo "Available RDS snapshots:"
+          aws rds describe-db-snapshots \
+            --db-instance-identifier sai-mahendra-prod \
+            --query 'DBSnapshots[*].[DBSnapshotIdentifier,SnapshotCreateTime]' \
+            --output table
+
+      - name: Instructions for database rollback
+        run: |
+          cat << EOF
+          
+          ⚠️  DATABASE ROLLBACK INSTRUCTIONS
+          
+          If database rollback is required:
+          
+          1. Identify the correct snapshot from the list above
+          2. Create a new RDS instance from the snapshot:
+             aws rds restore-db-instance-from-db-snapshot \\
+               --db-instance-identifier sai-mahendra-prod-rollback \\
+               --db-snapshot-identifier <snapshot-id>
+          
+          3. Update application connection strings
+          4. Verify data integrity
+          5. Switch DNS/endpoint to new instance
+          6. Monitor for issues
+          
+          ⚠️  This is a manual process to prevent accidental data loss
+          
+          EOF

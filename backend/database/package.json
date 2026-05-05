@@ -1,0 +1,49 @@
+{
+  "name": "@sai-mahendra/database-migrations",
+  "version": "1.0.0",
+  "description": "Database migration tools for Sai Mahendra Platform",
+  "main": "migrate.js",
+  "scripts": {
+    "migrate": "node migrate.js migrate",
+    "rollback": "node migrate.js rollback",
+    "reset": "CONFIRM_RESET=yes node migrate.js reset",
+    "status": "node migrate.js status",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:migrations": "jest __tests__/migrations.test.js --runInBand",
+    "test:crud": "jest __tests__/crud-operations.test.js --runInBand",
+    "test:transactions": "jest __tests__/transactions.test.js --runInBand"
+  },
+  "dependencies": {
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "mongodb": "^6.3.0",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.9",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 30000,
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "migrate.js",
+      "__tests__/**/*.js"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ]
+  },
+  "keywords": [
+    "database",
+    "migration",
+    "postgresql",
+    "mongodb",
+    "redis"
+  ],
+  "author": "Sai Mahendra Platform",
+  "license": "MIT"
+}

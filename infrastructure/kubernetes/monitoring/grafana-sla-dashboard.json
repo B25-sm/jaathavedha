@@ -1,0 +1,437 @@
+{
+  "dashboard": {
+    "title": "SLA Tracking Dashboard",
+    "tags": ["sla", "monitoring", "performance"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Availability SLA (99.9% Target)",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sla:api_availability:ratio_rate24h * 100",
+            "legendFormat": "Availability %"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 3,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 99.5, "color": "yellow" },
+                { "value": 99.9, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "API Latency P95 (200ms Target)",
+        "type": "stat",
+        "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sla:api_latency:p95_5m * 1000",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 200, "color": "yellow" },
+                { "value": 500, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "API Latency P99 (500ms Target)",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sla:api_latency:p99_5m * 1000",
+            "legendFormat": "P99 Latency"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 500, "color": "yellow" },
+                { "value": 1000, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Budget Remaining (Monthly)",
+        "type": "stat",
+        "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sla:error_budget:remaining_ratio_30d * 100",
+            "legendFormat": "Error Budget %"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 20, "color": "yellow" },
+                { "value": 50, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "API Availability Trend (24h)",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sla:api_availability:ratio_rate5m * 100",
+            "legendFormat": "Availability %"
+          },
+          {
+            "expr": "99.9",
+            "legendFormat": "SLA Target (99.9%)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percent",
+            "min": 99,
+            "max": 100
+          }
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 6,
+        "title": "API Latency Trend (24h)",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sla:api_latency:p95_5m * 1000",
+            "legendFormat": "P95 Latency"
+          },
+          {
+            "expr": "sla:api_latency:p99_5m * 1000",
+            "legendFormat": "P99 Latency"
+          },
+          {
+            "expr": "200",
+            "legendFormat": "P95 Target (200ms)"
+          },
+          {
+            "expr": "500",
+            "legendFormat": "P99 Target (500ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "min": 0
+          }
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 7,
+        "title": "Service Uptime by Service",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+        "targets": [
+          {
+            "expr": "sla:service_uptime:ratio_rate5m * 100",
+            "legendFormat": "{{ service }}"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "orientation": "horizontal",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 99, "color": "yellow" },
+                { "value": 99.9, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Payment Success Rate (95% Target)",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 12, "w": 6, "h": 6 },
+        "targets": [
+          {
+            "expr": "sla:payment_success:ratio_5m * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 95, "color": "yellow" },
+                { "value": 98, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Cache Hit Rate (80% Target)",
+        "type": "stat",
+        "gridPos": { "x": 18, "y": 12, "w": 6, "h": 6 },
+        "targets": [
+          {
+            "expr": "sla:cache_hit_rate:ratio_5m * 100",
+            "legendFormat": "Hit Rate %"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 80, "color": "yellow" },
+                { "value": 90, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Database Query Latency (100ms Target)",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 18, "w": 12, "h": 6 },
+        "targets": [
+          {
+            "expr": "sla:database_query:avg_latency_5m",
+            "legendFormat": "Avg Query Latency"
+          },
+          {
+            "expr": "100",
+            "legendFormat": "Target (100ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "min": 0
+          }
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 11,
+        "title": "Active Alerts by Severity",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 18, "w": 12, "h": 6 },
+        "targets": [
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\",severity=\"critical\"})",
+            "legendFormat": "Critical"
+          },
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\",severity=\"warning\"})",
+            "legendFormat": "Warning"
+          },
+          {
+            "expr": "count(ALERTS{alertstate=\"firing\",severity=\"info\"})",
+            "legendFormat": "Info"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "orientation": "horizontal",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 1, "color": "yellow" },
+                { "value": 5, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "SLA Compliance Summary (Last 30 Days)",
+        "type": "table",
+        "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+        "targets": [
+          {
+            "expr": "sla:api_availability:ratio_rate24h * 100",
+            "legendFormat": "API Availability",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "sla:api_latency:p95_5m * 1000",
+            "legendFormat": "API P95 Latency (ms)",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "sla:api_latency:p99_5m * 1000",
+            "legendFormat": "API P99 Latency (ms)",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "sla:payment_success:ratio_5m * 100",
+            "legendFormat": "Payment Success Rate",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "sla:cache_hit_rate:ratio_5m * 100",
+            "legendFormat": "Cache Hit Rate",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "sla:database_query:avg_latency_5m",
+            "legendFormat": "DB Query Latency (ms)",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge",
+            "options": {}
+          }
+        ],
+        "options": {
+          "showHeader": true
+        },
+        "fieldConfig": {
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "API Availability" },
+              "properties": [
+                { "id": "unit", "value": "percent" },
+                { "id": "decimals", "value": 3 },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "value": 0, "color": "red" },
+                      { "value": 99.5, "color": "yellow" },
+                      { "value": 99.9, "color": "green" }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

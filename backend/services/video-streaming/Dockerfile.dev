@@ -1,0 +1,22 @@
+FROM node:18-alpine
+
+# Install FFmpeg for video processing
+RUN apk add --no-cache ffmpeg
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY src/ ./src/
+
+# Expose port
+EXPOSE 3004
+
+# Start development server
+CMD ["npm", "run", "dev"]

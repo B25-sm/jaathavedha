@@ -1,0 +1,627 @@
+{
+  "dashboard": {
+    "title": "User Engagement & Retention",
+    "tags": ["business", "engagement", "retention", "users", "sai-mahendra"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "User Engagement Overview",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+        "collapsed": false
+      },
+      {
+        "id": 2,
+        "title": "Daily Active Users (DAU)",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1},
+        "targets": [
+          {
+            "expr": "business:daily_active_users:current",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Weekly Active Users (WAU)",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 6, "x": 6, "y": 1},
+        "targets": [
+          {
+            "expr": "business:weekly_active_users:current",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 200, "color": "yellow"},
+                {"value": 500, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Monthly Active Users (MAU)",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 6, "x": 12, "y": 1},
+        "targets": [
+          {
+            "expr": "business:monthly_active_users:current",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 500, "color": "yellow"},
+                {"value": 1000, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "User Stickiness (DAU/MAU)",
+        "type": "gauge",
+        "gridPos": {"h": 5, "w": 6, "x": 18, "y": 1},
+        "targets": [
+          {
+            "expr": "business:user_stickiness:current",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 20, "color": "yellow"},
+                {"value": 40, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Active Users Trend (Last 30 Days)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 6},
+        "targets": [
+          {
+            "expr": "business:daily_active_users:current",
+            "legendFormat": "DAU",
+            "refId": "A"
+          },
+          {
+            "expr": "business:weekly_active_users:current",
+            "legendFormat": "WAU",
+            "refId": "B"
+          },
+          {
+            "expr": "business:monthly_active_users:current",
+            "legendFormat": "MAU",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Active Users"},
+          {"format": "short"}
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "legend": {
+          "show": true,
+          "alignAsTable": true,
+          "avg": true,
+          "current": true,
+          "max": true,
+          "min": true
+        }
+      },
+      {
+        "id": 7,
+        "title": "Session Metrics",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+        "collapsed": false
+      },
+      {
+        "id": 8,
+        "title": "Average Session Duration",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 15},
+        "targets": [
+          {
+            "expr": "business:avg_session_duration_seconds:1h",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 120, "color": "yellow"},
+                {"value": 300, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Sessions per User",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 15},
+        "targets": [
+          {
+            "expr": "business:sessions_per_user:daily",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1.5, "color": "yellow"},
+                {"value": 3, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Page Views per Session",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 15},
+        "targets": [
+          {
+            "expr": "business:page_views_per_session:1h",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 3, "color": "yellow"},
+                {"value": 5, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Bounce Rate",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 15},
+        "targets": [
+          {
+            "expr": "business:bounce_rate:1h",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 40, "color": "yellow"},
+                {"value": 60, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Feature Adoption",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 19},
+        "collapsed": false
+      },
+      {
+        "id": 13,
+        "title": "Feature Adoption Rate",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "business:feature_adoption_rate:7d",
+            "legendFormat": "{{feature_name}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Course Completion Rate",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "targets": [
+          {
+            "expr": "business:course_completion_rate:30d",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 30, "color": "yellow"},
+                {"value": 60, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 15,
+        "title": "User Retention",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 28},
+        "collapsed": false
+      },
+      {
+        "id": 16,
+        "title": "1-Day Retention",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 0, "y": 29},
+        "targets": [
+          {
+            "expr": "business:user_retention:1d",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 40, "color": "yellow"},
+                {"value": 60, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 17,
+        "title": "7-Day Retention",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 8, "y": 29},
+        "targets": [
+          {
+            "expr": "business:user_retention:7d",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 30, "color": "yellow"},
+                {"value": 50, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 18,
+        "title": "30-Day Retention",
+        "type": "stat",
+        "gridPos": {"h": 5, "w": 8, "x": 16, "y": 29},
+        "targets": [
+          {
+            "expr": "business:user_retention:30d",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 20, "color": "yellow"},
+                {"value": 40, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 19,
+        "title": "Retention Trend",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 16, "x": 0, "y": 34},
+        "targets": [
+          {
+            "expr": "business:user_retention:1d",
+            "legendFormat": "1-Day Retention",
+            "refId": "A"
+          },
+          {
+            "expr": "business:user_retention:7d",
+            "legendFormat": "7-Day Retention",
+            "refId": "B"
+          },
+          {
+            "expr": "business:user_retention:30d",
+            "legendFormat": "30-Day Retention",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Retention Rate", "min": 0, "max": 100},
+          {"format": "short"}
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "legend": {
+          "show": true,
+          "alignAsTable": true,
+          "avg": true,
+          "current": true
+        }
+      },
+      {
+        "id": 20,
+        "title": "Churn Metrics",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 16, "y": 34},
+        "targets": [
+          {
+            "expr": "business:churn_rate:monthly",
+            "refId": "A"
+          },
+          {
+            "expr": "business:customer_lifetime_days:avg",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "orientation": "vertical"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "A"},
+              "properties": [
+                {"id": "displayName", "value": "Monthly Churn Rate"},
+                {"id": "unit", "value": "percent"},
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"value": 0, "color": "green"},
+                      {"value": 5, "color": "yellow"},
+                      {"value": 10, "color": "red"}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "B"},
+              "properties": [
+                {"id": "displayName", "value": "Avg Customer Lifetime"},
+                {"id": "unit", "value": "d"}
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 21,
+        "title": "User Activity Heatmap",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 42},
+        "targets": [
+          {
+            "expr": "sum(increase(user_activity_total[1h])) by (hour)",
+            "format": "time_series",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "calculate": true,
+          "calculation": {},
+          "cellGap": 2,
+          "cellRadius": 0,
+          "color": {
+            "exponent": 0.5,
+            "fill": "dark-orange",
+            "mode": "scheme",
+            "reverse": false,
+            "scale": "exponential",
+            "scheme": "Spectral",
+            "steps": 128
+          },
+          "exemplars": {
+            "color": "rgba(255,0,255,0.7)"
+          },
+          "filterValues": {
+            "le": 1e-9
+          },
+          "legend": {
+            "show": true
+          },
+          "rowsFrame": {
+            "layout": "auto"
+          },
+          "tooltip": {
+            "show": true,
+            "yHistogram": false
+          },
+          "yAxis": {
+            "axisPlacement": "left",
+            "reverse": false
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "hideFrom": {
+                "tooltip": false,
+                "viz": false,
+                "legend": false
+              },
+              "scaleDistribution": {
+                "type": "linear"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

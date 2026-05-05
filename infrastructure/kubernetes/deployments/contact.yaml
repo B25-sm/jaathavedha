@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contact
+  namespace: sai-mahendra-platform
+  labels:
+    app: contact
+    tier: backend
+    component: communication
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: contact
+  template:
+    metadata:
+      labels:
+        app: contact
+        tier: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3004"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: contact-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: contact
+        image: sai-mahendra/contact:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3004
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: contact-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3004"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: postgres-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: WHATSAPP_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: whatsapp-credentials
+              key: api-key
+        - name: WHATSAPP_PHONE_NUMBER_ID
+          valueFrom:
+            secretKeyRef:
+              name: whatsapp-credentials
+              key: phone-number-id
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sendgrid-credentials
+              key: api-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: contact-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: contact
+  namespace: sai-mahendra-platform
+  labels:
+    app: contact
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3004
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: contact
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: contact-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  RATE_LIMIT_WINDOW: "900000"
+  RATE_LIMIT_MAX: "5"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: contact-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: contact
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: contact-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: contact

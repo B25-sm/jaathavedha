@@ -1,0 +1,227 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'backend/**' ]
+  pull_request:
+    branches: [ main, develop ]
+    paths: [ 'backend/**' ]
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: sai-mahendra/platform
+
+jobs:
+  test:
+    name: Test Backend Services
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: admin
+        ports:
+          - 27017:27017
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: |
+        npm ci
+        cd backend && npm ci
+
+    - name: Build shared libraries
+      run: |
+        cd backend/shared/types && npm run build
+        cd ../utils && npm run build
+
+    - name: Lint code
+      run: |
+        cd backend && npm run lint
+
+    - name: Run unit tests
+      run: |
+        cd backend && npm run test
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        REDIS_URL: redis://localhost:6379
+        MONGODB_URL: mongodb://admin:admin@localhost:27017/test_db?authSource=admin
+
+    - name: Run integration tests
+      run: |
+        cd backend && npm run test:integration
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        REDIS_URL: redis://localhost:6379
+        MONGODB_URL: mongodb://admin:admin@localhost:27017/test_db?authSource=admin
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./backend/coverage
+        flags: backend
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: './backend'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        service: [api-gateway, user-management, course-management, payment, contact, content-management, analytics, notification]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend/services/${{ matrix.service }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+    - name: Deploy to staging
+      run: |
+        kubectl apply -f k8s/staging/
+        kubectl rollout status deployment/api-gateway -n staging
+        kubectl rollout status deployment/user-management -n staging
+        kubectl rollout status deployment/course-management -n staging
+        kubectl rollout status deployment/payment -n staging
+
+    - name: Run smoke tests
+      run: |
+        # Wait for services to be ready
+        sleep 30
+        # Run basic health checks
+        curl -f http://staging.saimahendra.com/health || exit 1
+        curl -f http://staging.saimahendra.com/api/v1/health || exit 1
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+
+    - name: Deploy to production
+      run: |
+        kubectl apply -f k8s/production/
+        kubectl rollout status deployment/api-gateway -n production
+        kubectl rollout status deployment/user-management -n production
+        kubectl rollout status deployment/course-management -n production
+        kubectl rollout status deployment/payment -n production
+
+    - name: Run production health checks
+      run: |
+        # Wait for services to be ready
+        sleep 60
+        # Run comprehensive health checks
+        curl -f https://api.saimahendra.com/health || exit 1
+        curl -f https://api.saimahendra.com/api/v1/health || exit 1

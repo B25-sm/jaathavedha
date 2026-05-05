@@ -1,0 +1,104 @@
+{{ define "slack.default.title" }}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }}
+{{ end }}
+
+{{ define "slack.default.text" }}
+{{ range .Alerts }}
+*Alert:* {{ .Labels.alertname }}
+*Severity:* {{ .Labels.severity }}
+*Summary:* {{ .Annotations.summary }}
+*Description:* {{ .Annotations.description }}
+*Details:*
+{{ range .Labels.SortedPairs }}  • {{ .Name }}: {{ .Value }}
+{{ end }}
+{{ end }}
+{{ end }}
+
+{{ define "email.default.subject" }}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - Sai Mahendra Platform
+{{ end }}
+
+{{ define "email.default.html" }}
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .header { background-color: #f4f4f4; padding: 20px; border-bottom: 3px solid #e74c3c; }
+    .critical { border-left: 5px solid #e74c3c; }
+    .warning { border-left: 5px solid #f39c12; }
+    .info { border-left: 5px solid #3498db; }
+    .alert { margin: 20px 0; padding: 15px; background-color: #f9f9f9; }
+    .label { font-weight: bold; color: #555; }
+    .value { color: #333; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+    th { background-color: #f4f4f4; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Sai Mahendra Platform Alert</h1>
+    <p>Status: <strong>{{ .Status | toUpper }}</strong></p>
+  </div>
+  
+  <div class="content">
+    <h2>{{ .GroupLabels.alertname }}</h2>
+    
+    {{ if gt (len .Alerts.Firing) 0 }}
+    <h3>🔥 Firing Alerts ({{ .Alerts.Firing | len }})</h3>
+    {{ range .Alerts.Firing }}
+    <div class="alert {{ .Labels.severity }}">
+      <p><span class="label">Alert:</span> <span class="value">{{ .Labels.alertname }}</span></p>
+      <p><span class="label">Severity:</span> <span class="value">{{ .Labels.severity }}</span></p>
+      <p><span class="label">Summary:</span> <span class="value">{{ .Annotations.summary }}</span></p>
+      <p><span class="label">Description:</span> <span class="value">{{ .Annotations.description }}</span></p>
+      
+      <table>
+        <tr><th>Label</th><th>Value</th></tr>
+        {{ range .Labels.SortedPairs }}
+        <tr><td>{{ .Name }}</td><td>{{ .Value }}</td></tr>
+        {{ end }}
+      </table>
+      
+      <p><span class="label">Started:</span> <span class="value">{{ .StartsAt }}</span></p>
+    </div>
+    {{ end }}
+    {{ end }}
+    
+    {{ if gt (len .Alerts.Resolved) 0 }}
+    <h3>✅ Resolved Alerts ({{ .Alerts.Resolved | len }})</h3>
+    {{ range .Alerts.Resolved }}
+    <div class="alert info">
+      <p><span class="label">Alert:</span> <span class="value">{{ .Labels.alertname }}</span></p>
+      <p><span class="label">Summary:</span> <span class="value">{{ .Annotations.summary }}</span></p>
+      <p><span class="label">Resolved:</span> <span class="value">{{ .EndsAt }}</span></p>
+    </div>
+    {{ end }}
+    {{ end }}
+  </div>
+  
+  <div class="footer" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #777; font-size: 12px;">
+    <p>This is an automated alert from the Sai Mahendra Platform monitoring system.</p>
+    <p>View in Prometheus: <a href="http://prometheus.monitoring.svc.cluster.local:9090">Prometheus Dashboard</a></p>
+  </div>
+</body>
+</html>
+{{ end }}
+
+{{ define "pagerduty.default.description" }}
+{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}
+{{ end }}
+
+{{ define "pagerduty.default.details" }}
+{
+  "firing": "{{ .Alerts.Firing | len }}",
+  "resolved": "{{ .Alerts.Resolved | len }}",
+  "summary": "{{ .CommonAnnotations.summary }}",
+  "description": "{{ .CommonAnnotations.description }}",
+  "cluster": "{{ .GroupLabels.cluster }}",
+  "service": "{{ .GroupLabels.service }}",
+  "component": "{{ .GroupLabels.component }}",
+  "severity": "{{ .GroupLabels.severity }}"
+}
+{{ end }}

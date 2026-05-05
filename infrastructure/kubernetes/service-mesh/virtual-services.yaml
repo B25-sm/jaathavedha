@@ -1,0 +1,226 @@
+# Istio Virtual Services for Traffic Management
+# Defines routing rules and traffic policies for services
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - api-gateway
+  - api.saimahendra.com
+  gateways:
+  - istio-gateway
+  - mesh
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: api-gateway
+        port:
+          number: 3000
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: user-management-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - user-management
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: user-management
+        port:
+          number: 3001
+    timeout: 15s
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: course-management-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - course-management
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: course-management
+        port:
+          number: 3002
+    timeout: 20s
+    retries:
+      attempts: 3
+      perTryTimeout: 7s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: payment-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - payment
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: payment
+        port:
+          number: 3003
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: contact-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - contact
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: contact
+        port:
+          number: 3004
+    timeout: 15s
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: content-management-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - content-management
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: content-management
+        port:
+          number: 3005
+    timeout: 20s
+    retries:
+      attempts: 3
+      perTryTimeout: 7s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: analytics-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - analytics
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: analytics
+        port:
+          number: 3006
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: notification-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - notification
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: notification
+        port:
+          number: 3007
+    timeout: 15s
+    retries:
+      attempts: 3
+      perTryTimeout: 5s
+      retryOn: 5xx,reset,connect-failure
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: admin-panel-vs
+  namespace: sai-mahendra-platform
+spec:
+  hosts:
+  - admin-panel
+  - admin.saimahendra.com
+  gateways:
+  - istio-gateway
+  - mesh
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: admin-panel
+        port:
+          number: 3008
+    timeout: 20s
+    retries:
+      attempts: 3
+      perTryTimeout: 7s
+      retryOn: 5xx,reset,connect-failure

@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  namespace: sai-mahendra-platform
+  labels:
+    app: analytics
+    tier: backend
+    component: analytics
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+        tier: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3006"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: analytics-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: analytics
+        image: sai-mahendra/analytics:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3006
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: analytics-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3006"
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-credentials
+              key: url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: PROMETHEUS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: analytics-config
+              key: PROMETHEUS_URL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: analytics-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics
+  namespace: sai-mahendra-platform
+  labels:
+    app: analytics
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3006
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: analytics
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  PROMETHEUS_URL: "http://prometheus.sai-mahendra-monitoring:9090"
+  REPORT_GENERATION_SCHEDULE: "0 0 * * *"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: analytics-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: analytics
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: analytics-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: analytics

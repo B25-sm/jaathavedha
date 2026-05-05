@@ -1,0 +1,37 @@
+{
+  "name": "sai-mahendra-integration-tests",
+  "version": "2.0.0",
+  "description": "Comprehensive system integration tests for Sai Mahendra platform",
+  "scripts": {
+    "test": "mocha system-integration-test.js",
+    "test:watch": "mocha system-integration-test.js --watch",
+    "test:verbose": "mocha system-integration-test.js --reporter spec",
+    "test:ci": "mocha system-integration-test.js --reporter json > test-results.json",
+    "test:journey": "mocha system-integration-test.js --grep 'Complete User Journey'",
+    "test:admin": "mocha system-integration-test.js --grep 'Admin Panel'",
+    "test:api": "mocha system-integration-test.js --grep 'API Integration'",
+    "test:database": "mocha system-integration-test.js --grep 'Database Integration'",
+    "test:services": "mocha system-integration-test.js --grep 'Service-to-Service'",
+    "test:failures": "mocha system-integration-test.js --grep 'Failure Scenario'"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "pg": "^8.11.0",
+    "ioredis": "^5.3.0"
+  },
+  "devDependencies": {
+    "mocha": "^10.2.0",
+    "chai": "^4.3.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "integration-tests",
+    "system-tests",
+    "e2e-tests",
+    "api-tests",
+    "user-journey",
+    "admin-panel"
+  ]
+}

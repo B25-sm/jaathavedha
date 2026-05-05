@@ -1,0 +1,107 @@
+# Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+# NEVER commit terraform.tfvars to version control!
+
+# Environment Configuration
+environment = "dev" # Options: dev, staging, prod
+aws_region  = "us-east-1"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+
+# EKS Configuration
+kubernetes_version = "1.27"
+
+node_groups = {
+  general = {
+    instance_types = ["t3.medium"]
+    min_size      = 1
+    max_size      = 10
+    desired_size  = 3
+    disk_size     = 50
+  }
+  # Uncomment for additional node groups
+  # compute = {
+  #   instance_types = ["t3.large"]
+  #   min_size      = 1
+  #   max_size      = 5
+  #   desired_size  = 2
+  #   disk_size     = 100
+  # }
+}
+
+# RDS Configuration
+rds_instance_class    = "db.t3.medium"
+rds_allocated_storage = 100
+database_name         = "sai_mahendra"
+database_username     = "postgres"
+
+# Redis Configuration
+redis_node_type  = "cache.t3.micro"
+redis_num_nodes  = 1 # Set to 2+ for production with automatic failover
+
+# SSL Certificate (optional - for HTTPS on ALB)
+ssl_certificate_arn = "" # ARN of ACM certificate
+
+# CDN Configuration
+project_name      = "sai-mahendra"
+cdn_price_class   = "PriceClass_100" # Options: PriceClass_100, PriceClass_200, PriceClass_All
+cdn_aliases       = [] # e.g., ["cdn.example.com"]
+cdn_certificate_arn = "" # ARN of ACM certificate in us-east-1 for CloudFront
+
+# Geo Restriction (optional)
+cdn_geo_restriction_type      = "none" # Options: none, whitelist, blacklist
+cdn_geo_restriction_locations = []     # e.g., ["US", "CA", "GB"]
+
+# ============================================
+# SENSITIVE VARIABLES
+# ============================================
+# These should be set via environment variables or a secure secrets manager
+# Example: export TF_VAR_database_password="your-password"
+
+# Database Password (REQUIRED)
+# Use a strong password with at least 32 characters
+database_password = "CHANGE_ME_TO_SECURE_PASSWORD"
+
+# JWT Secret (REQUIRED)
+# Use a strong random string for JWT token signing
+jwt_secret = "CHANGE_ME_TO_SECURE_JWT_SECRET"
+
+# Payment Gateway Credentials (REQUIRED for payment functionality)
+razorpay_key_id     = ""
+razorpay_key_secret = ""
+stripe_secret_key   = ""
+
+# Email Service (REQUIRED for notifications)
+sendgrid_api_key = ""
+
+# ============================================
+# ENVIRONMENT-SPECIFIC EXAMPLES
+# ============================================
+
+# Development Environment
+# environment = "dev"
+# rds_instance_class = "db.t3.micro"
+# redis_node_type = "cache.t3.micro"
+# redis_num_nodes = 1
+
+# Staging Environment
+# environment = "staging"
+# rds_instance_class = "db.t3.small"
+# redis_node_type = "cache.t3.small"
+# redis_num_nodes = 2
+
+# Production Environment
+# environment = "prod"
+# rds_instance_class = "db.t3.medium"
+# redis_node_type = "cache.t3.medium"
+# redis_num_nodes = 3
+# node_groups = {
+#   general = {
+#     instance_types = ["t3.large"]
+#     min_size      = 3
+#     max_size      = 20
+#     desired_size  = 5
+#     disk_size     = 100
+#   }
+# }

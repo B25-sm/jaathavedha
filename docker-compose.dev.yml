@@ -1,0 +1,523 @@
+version: '3.8'
+
+services:
+  # Databases
+  postgres:
+    image: postgres:15-alpine
+    container_name: sai-mahendra-postgres
+    environment:
+      POSTGRES_DB: sai_mahendra_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - sai-mahendra-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sai-mahendra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sai-mahendra-network
+
+  mongodb:
+    image: mongo:7
+    container_name: sai-mahendra-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: sai_mahendra_analytics
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - sai-mahendra-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/services/api-gateway
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - USER_SERVICE_URL=http://user-management:3001
+      - COURSE_SERVICE_URL=http://course-management:3002
+      - PAYMENT_SERVICE_URL=http://payment:3003
+      - CONTACT_SERVICE_URL=http://contact:3004
+      - CONTENT_SERVICE_URL=http://content-management:3005
+      - ANALYTICS_SERVICE_URL=http://analytics:3006
+      - NOTIFICATION_SERVICE_URL=http://notification:3007
+      - ADMIN_PANEL_SERVICE_URL=http://admin-panel:3008
+      - LMS_SERVICE_URL=http://lms:3010
+      - LIVE_STREAMING_SERVICE_URL=http://live-streaming:3011
+      - MOBILE_API_SERVICE_URL=http://mobile-api:3012
+      - VIDEO_STREAMING_SERVICE_URL=http://video-streaming:3013
+      - INSTRUCTOR_PORTAL_SERVICE_URL=http://instructor-portal:3014
+      - STUDENT_DASHBOARD_SERVICE_URL=http://student-dashboard:3015
+    depends_on:
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/api-gateway:/app
+      - /app/node_modules
+
+  # Microservices
+  user-management:
+    build:
+      context: ./backend/services/user-management
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-user-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_ACCESS_EXPIRY=15m
+      - JWT_REFRESH_EXPIRY=7d
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/user-management:/app
+      - /app/node_modules
+
+  course-management:
+    build:
+      context: ./backend/services/course-management
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-course-service
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/course-management:/app
+      - /app/node_modules
+
+  payment:
+    build:
+      context: ./backend/services/payment
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-payment-service
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - REDIS_URL=redis://redis:6379
+      - RAZORPAY_KEY_ID=your_razorpay_key_id
+      - RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+      - STRIPE_SECRET_KEY=your_stripe_secret_key
+      - STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/payment:/app
+      - /app/node_modules
+
+  contact:
+    build:
+      context: ./backend/services/contact
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-contact-service
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - REDIS_URL=redis://redis:6379
+      - SENDGRID_API_KEY=your_sendgrid_api_key
+      - FROM_EMAIL=noreply@saimahendra.com
+      - ADMIN_EMAIL=admin@saimahendra.com
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=your_whatsapp_business_account_id
+      - WHATSAPP_ACCESS_TOKEN=your_whatsapp_access_token
+      - WHATSAPP_PHONE_NUMBER_ID=your_whatsapp_phone_number_id
+      - WHATSAPP_WEBHOOK_VERIFY_TOKEN=your_whatsapp_webhook_verify_token
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=5
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/contact:/app
+      - /app/node_modules
+
+  content-management:
+    build:
+      context: ./backend/services/content-management
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-content-service
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - PORT=3005
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_content?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - AWS_ACCESS_KEY_ID=your_aws_access_key
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=sai-mahendra-content
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/content-management:/app
+      - /app/node_modules
+
+  analytics:
+    build:
+      context: ./backend/services/analytics
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-analytics-service
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - PORT=3006
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_analytics?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/analytics:/app
+      - /app/node_modules
+
+  notification:
+    build:
+      context: ./backend/services/notification
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-notification-service
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=development
+      - PORT=3007
+      - REDIS_URL=redis://redis:6379
+      - SENDGRID_API_KEY=your_sendgrid_api_key
+      - FCM_SERVER_KEY=your_fcm_server_key
+    depends_on:
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/notification:/app
+      - /app/node_modules
+
+  admin-panel:
+    build:
+      context: ./backend/services/admin-panel
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-admin-panel
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=development
+      - PORT=3008
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_content?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_ACCESS_EXPIRY=15m
+      - JWT_REFRESH_EXPIRY=7d
+      - ADMIN_SESSION_TIMEOUT=3600
+      - USER_SERVICE_URL=http://user-management:3001
+      - COURSE_SERVICE_URL=http://course-management:3002
+      - PAYMENT_SERVICE_URL=http://payment:3003
+      - CONTENT_SERVICE_URL=http://content-management:3005
+      - ANALYTICS_SERVICE_URL=http://analytics:3006
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - user-management
+      - course-management
+      - payment
+      - content-management
+      - analytics
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/admin-panel:/app
+      - /app/node_modules
+
+  security:
+    build:
+      context: ./backend/services/security
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-security-service
+    ports:
+      - "3009:3009"
+    environment:
+      - NODE_ENV=development
+      - PORT=3009
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/sai_mahendra_dev
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_security?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - MASTER_ENCRYPTION_KEY=dev-master-key-change-in-production-min-32-characters-long
+      - ENCRYPTION_ALGORITHM=aes-256-gcm
+      - KEY_ROTATION_DAYS=90
+      - TLS_ENABLED=false
+      - SECURITY_LOG_LEVEL=info
+      - ANOMALY_DETECTION_ENABLED=true
+      - INTRUSION_DETECTION_ENABLED=true
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+      - DATA_RETENTION_DAYS=2555
+      - ANONYMIZATION_ENABLED=true
+      - CONSENT_TRACKING_ENABLED=true
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/security:/app
+      - /app/node_modules
+
+  # NEW SERVICES - Tasks 22-27
+  
+  lms:
+    build:
+      context: ./backend/services/lms
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-lms
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=development
+      - PORT=3010
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_lms?authSource=admin
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - USER_SERVICE_URL=http://user-management:3001
+      - COURSE_SERVICE_URL=http://course-management:3002
+      - VIDEO_SERVICE_URL=http://video-streaming:3004
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/lms:/app
+      - /app/node_modules
+
+  live-streaming:
+    build:
+      context: ./backend/services/live-streaming
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-live-streaming
+    ports:
+      - "3011:3011"
+    environment:
+      - NODE_ENV=development
+      - PORT=3011
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_live?authSource=admin
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/live-streaming:/app
+      - /app/node_modules
+
+  mobile-api:
+    build:
+      context: ./backend/services/mobile-api
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-mobile-api
+    ports:
+      - "3012:3012"
+    environment:
+      - NODE_ENV=development
+      - PORT=3012
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_mobile?authSource=admin
+      - FCM_SERVER_KEY=your_fcm_server_key
+      - APNS_KEY_ID=your_apns_key_id
+      - APNS_TEAM_ID=your_apns_team_id
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/mobile-api:/app
+      - /app/node_modules
+
+  video-streaming:
+    build:
+      context: ./backend/services/video-streaming
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-video-streaming
+    ports:
+      - "3013:3013"
+    environment:
+      - NODE_ENV=development
+      - PORT=3013
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_video?authSource=admin
+      - AWS_ACCESS_KEY_ID=your_aws_access_key
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=sai-mahendra-videos
+      - CLOUDFRONT_DOMAIN=your_cloudfront_domain
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/video-streaming:/app
+      - /app/node_modules
+
+  instructor-portal:
+    build:
+      context: ./backend/services/instructor-portal
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-instructor-portal
+    ports:
+      - "3014:3014"
+    environment:
+      - NODE_ENV=development
+      - PORT=3014
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_instructor?authSource=admin
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - VIDEO_SERVICE_URL=http://video-streaming:3013
+      - COURSE_SERVICE_URL=http://course-management:3002
+      - ANALYTICS_SERVICE_URL=http://analytics:3006
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/instructor-portal:/app
+      - /app/node_modules
+
+  student-dashboard:
+    build:
+      context: ./backend/services/student-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: sai-mahendra-student-dashboard
+    ports:
+      - "3015:3015"
+    environment:
+      - NODE_ENV=development
+      - PORT=3015
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=sai_mahendra_dev
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/sai_mahendra_student?authSource=admin
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - COURSE_SERVICE_URL=http://course-management:3002
+      - LMS_SERVICE_URL=http://lms:3010
+      - VIDEO_SERVICE_URL=http://video-streaming:3013
+      - ANALYTICS_SERVICE_URL=http://analytics:3006
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - sai-mahendra-network
+    volumes:
+      - ./backend/services/student-dashboard:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+
+networks:
+  sai-mahendra-network:
+    driver: bridge

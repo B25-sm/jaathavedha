@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: deployment-test
+  namespace: sai-mahendra-platform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: deployment-test
+    image: curlimages/curl:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "Testing API Gateway health endpoint..."
+      curl -f http://api-gateway.sai-mahendra-platform.svc.cluster.local:3000/health
+      
+      echo "Testing User Management service..."
+      curl -f http://user-management.sai-mahendra-platform.svc.cluster.local:3001/health
+      
+      echo "Testing Course Management service..."
+      curl -f http://course-management.sai-mahendra-platform.svc.cluster.local:3002/health
+      
+      echo "Testing Payment service..."
+      curl -f http://payment.sai-mahendra-platform.svc.cluster.local:3003/health
+      
+      echo "Testing Contact service..."
+      curl -f http://contact.sai-mahendra-platform.svc.cluster.local:3004/health
+      
+      echo "Testing Content Management service..."
+      curl -f http://content-management.sai-mahendra-platform.svc.cluster.local:3005/health
+      
+      echo "Testing Analytics service..."
+      curl -f http://analytics.sai-mahendra-platform.svc.cluster.local:3006/health
+      
+      echo "Testing Notification service..."
+      curl -f http://notification.sai-mahendra-platform.svc.cluster.local:3007/health
+      
+      echo "All services are healthy!"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: database-connectivity-test
+  namespace: sai-mahendra-platform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: postgres-test
+    image: postgres:15-alpine
+    env:
+    - name: PGPASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: database-credentials
+          key: password
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "Testing PostgreSQL connectivity..."
+      pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U $DATABASE_USER
+      
+      echo "Testing database connection..."
+      psql -h $DATABASE_HOST -p $DATABASE_PORT -U $DATABASE_USER -d $DATABASE_NAME -c "SELECT 1;"
+      
+      echo "Database connectivity test passed!"
+    envFrom:
+    - configMapRef:
+        name: database-config
+  - name: redis-test
+    image: redis:7-alpine
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      echo "Testing Redis connectivity..."
+      redis-cli -h $REDIS_HOST -p $REDIS_PORT ping
+      
+      echo "Redis connectivity test passed!"
+    env:
+    - name: REDIS_HOST
+      valueFrom:
+        configMapKeyRef:
+          name: redis-config
+          key: host
+    - name: REDIS_PORT
+      valueFrom:
+        configMapKeyRef:
+          name: redis-config
+          key: port
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: api-integration-test
+  namespace: sai-mahendra-platform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: api-test
+    image: curlimages/curl:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      API_GATEWAY="http://api-gateway.sai-mahendra-platform.svc.cluster.local:3000"
+      
+      echo "Testing API Gateway routing..."
+      
+      # Test health endpoints through gateway
+      curl -f "$API_GATEWAY/api/v1/auth/health"
+      curl -f "$API_GATEWAY/api/v1/courses/health"
+      curl -f "$API_GATEWAY/api/v1/payments/health"
+      curl -f "$API_GATEWAY/api/v1/contact/health"
+      curl -f "$API_GATEWAY/api/v1/content/health"
+      curl -f "$API_GATEWAY/api/v1/analytics/health"
+      curl -f "$API_GATEWAY/api/v1/notifications/health"
+      
+      echo "Testing API versioning..."
+      curl -f "$API_GATEWAY/api/v1/health"
+      
+      echo "Testing rate limiting..."
+      for i in $(seq 1 5); do
+        curl -f "$API_GATEWAY/api/v1/health" > /dev/null
+      done
+      
+      echo "API integration tests passed!"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-test
+  namespace: sai-mahendra-platform
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+  - name: security-test
+    image: curlimages/curl:latest
+    command:
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      API_GATEWAY="http://api-gateway.sai-mahendra-platform.svc.cluster.local:3000"
+      
+      echo "Testing authentication requirements..."
+      
+      # Test that protected endpoints require authentication
+      response=$(curl -s -o /dev/null -w "%{http_code}" "$API_GATEWAY/api/v1/auth/profile")
+      if [ "$response" != "401" ]; then
+        echo "ERROR: Protected endpoint should return 401 without authentication"
+        exit 1
+      fi
+      
+      # Test CORS headers
+      response=$(curl -s -H "Origin: https://malicious-site.com" -I "$API_GATEWAY/api/v1/health")
+      if echo "$response" | grep -q "Access-Control-Allow-Origin: https://malicious-site.com"; then
+        echo "ERROR: CORS should not allow arbitrary origins"
+        exit 1
+      fi
+      
+      # Test security headers
+      response=$(curl -s -I "$API_GATEWAY/api/v1/health")
+      if ! echo "$response" | grep -q "X-Content-Type-Options: nosniff"; then
+        echo "ERROR: Missing security header X-Content-Type-Options"
+        exit 1
+      fi
+      
+      echo "Security tests passed!"

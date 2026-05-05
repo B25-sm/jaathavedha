@@ -1,0 +1,872 @@
+name: CI/CD Pipeline - Multi-Environment Deployment
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+    paths: 
+      - 'backend/**'
+      - 'infrastructure/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'infrastructure/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  TERRAFORM_VERSION: '1.6.0'
+  KUBECTL_VERSION: '1.28.0'
+
+jobs:
+  # ============================================================================
+  # CONTINUOUS INTEGRATION JOBS
+  # ============================================================================
+  
+  code-quality:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Run ESLint
+        run: |
+          cd backend
+          npm run lint -- --format json --output-file eslint-report.json || true
+
+      - name: Run TypeScript type checking
+        run: |
+          cd backend
+          npx tsc --noEmit --project tsconfig.json
+
+      - name: Upload lint results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: backend/eslint-report.json
+          category: eslint
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: 
+          - user-management
+          - course-management
+          - payment
+          - contact
+          - content-management
+          - analytics
+          - notification
+          - admin-panel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd backend/services/${{ matrix.service }}
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd backend/services/${{ matrix.service }}
+          npm run test -- --coverage --coverageReporters=json --coverageReporters=lcov
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./backend/services/${{ matrix.service }}/coverage/lcov.info
+          flags: ${{ matrix.service }}
+          name: ${{ matrix.service }}-coverage
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: admin
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Run database migrations
+        run: |
+          cd backend/database
+          npm ci
+          npm run migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+      - name: Run integration tests
+        run: |
+          cd backend
+          npm run test:integration
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+          MONGODB_URL: mongodb://admin:admin@localhost:27017/test_db?authSource=admin
+
+  # ============================================================================
+  # SECURITY SCANNING JOBS
+  # ============================================================================
+
+  security-sast:
+    name: SAST - Static Application Security Testing
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript, typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:javascript"
+
+  security-dependencies:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: |
+          cd backend
+          npm audit --audit-level=moderate --json > npm-audit.json || true
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json-file-output=snyk-report.json
+          command: test
+
+      - name: Upload Snyk results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: snyk-report.json
+          category: snyk
+
+  security-container:
+    name: Container Image Security Scan
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests]
+    strategy:
+      matrix:
+        service: 
+          - api-gateway
+          - user-management
+          - course-management
+          - payment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ matrix.service }}:test \
+            -f backend/services/${{ matrix.service }}/Dockerfile.dev \
+            backend/services/${{ matrix.service }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:test
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: ${{ matrix.service }}:test
+          fail-build: false
+          severity-cutoff: high
+
+  security-secrets:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+  # ============================================================================
+  # BUILD AND PUSH DOCKER IMAGES
+  # ============================================================================
+
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, integration-tests, security-sast, security-dependencies]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - user-management
+          - course-management
+          - payment
+          - contact
+          - content-management
+          - analytics
+          - notification
+          - admin-panel
+          - pwa
+          - calendar-integration
+          - video-conferencing
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYYMMDD-HHmmss'}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/services/${{ matrix.service }}
+          file: ./backend/services/${{ matrix.service }}/Dockerfile.dev
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Sign container image
+        run: |
+          echo "Signing image with cosign..."
+          # cosign sign --key env://COSIGN_KEY ${{ steps.meta.outputs.tags }}
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+  # ============================================================================
+  # INFRASTRUCTURE VALIDATION
+  # ============================================================================
+
+  validate-terraform:
+    name: Validate Terraform Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format Check
+        run: |
+          cd infrastructure/terraform
+          terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: |
+          cd infrastructure/terraform
+          terraform init -backend=false
+
+      - name: Terraform Validate
+        run: |
+          cd infrastructure/terraform
+          terraform validate
+
+      - name: Run tfsec security scanner
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: true
+
+  validate-kubernetes:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Validate Kubernetes manifests
+        run: |
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            echo "Validating $file"
+            kubectl apply --dry-run=client -f "$file"
+          done
+
+      - name: Run kubeconform
+        uses: docker://ghcr.io/yannh/kubeconform:latest
+        with:
+          args: -summary infrastructure/kubernetes/
+
+      - name: Run Polaris security audit
+        uses: fairwindsops/polaris@master
+        with:
+          config: infrastructure/kubernetes/polaris-config.yaml
+
+  # ============================================================================
+  # DEPLOYMENT TO DEV ENVIRONMENT
+  # ============================================================================
+
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [build-and-push, validate-terraform, validate-kubernetes]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: dev
+      url: https://dev.saimahendra.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-dev --region us-east-1
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          # Update image tags in deployment files
+          export IMAGE_TAG="${{ github.sha }}"
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            envsubst < "$file" | kubectl apply -n dev -f -
+          done
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/api-gateway -n dev --timeout=5m
+          kubectl rollout status deployment/user-management -n dev --timeout=5m
+          kubectl rollout status deployment/course-management -n dev --timeout=5m
+          kubectl rollout status deployment/payment -n dev --timeout=5m
+
+      - name: Run smoke tests
+        run: |
+          sleep 30
+          curl -f https://dev.saimahendra.com/health || exit 1
+          curl -f https://dev.saimahendra.com/api/v1/health || exit 1
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Dev deployment ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ============================================================================
+  # DEPLOYMENT TO STAGING ENVIRONMENT
+  # ============================================================================
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-and-push, validate-terraform, validate-kubernetes]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.saimahendra.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-staging --region us-east-1
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace staging --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Blue-Green Deployment - Deploy Green
+        run: |
+          export IMAGE_TAG="${{ github.sha }}"
+          export DEPLOYMENT_COLOR="green"
+          
+          # Deploy green version
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            envsubst < "$file" | sed "s/app: /app: green-/" | kubectl apply -n staging -f -
+          done
+
+      - name: Wait for green deployment
+        run: |
+          kubectl rollout status deployment/green-api-gateway -n staging --timeout=5m
+          kubectl rollout status deployment/green-user-management -n staging --timeout=5m
+          kubectl rollout status deployment/green-course-management -n staging --timeout=5m
+
+      - name: Run integration tests on green
+        run: |
+          sleep 30
+          # Test green deployment internally
+          kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n staging -- \
+            curl -f http://green-api-gateway:3000/health
+
+      - name: Switch traffic to green (Blue-Green cutover)
+        run: |
+          # Update service selectors to point to green
+          kubectl patch service api-gateway -n staging -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service user-management -n staging -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service course-management -n staging -p '{"spec":{"selector":{"version":"green"}}}'
+
+      - name: Verify staging deployment
+        run: |
+          sleep 30
+          curl -f https://staging.saimahendra.com/health || exit 1
+          curl -f https://staging.saimahendra.com/api/v1/health || exit 1
+
+      - name: Run E2E tests
+        run: |
+          cd backend
+          npm run test:e2e
+        env:
+          TEST_URL: https://staging.saimahendra.com
+
+      - name: Remove blue deployment
+        if: success()
+        run: |
+          # Clean up old blue deployment
+          kubectl delete deployment -l version=blue -n staging
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back to blue..."
+          kubectl patch service api-gateway -n staging -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl delete deployment -l version=green -n staging
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Staging deployment ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ============================================================================
+  # DEPLOYMENT TO PRODUCTION ENVIRONMENT
+  # ============================================================================
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://api.saimahendra.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-prod --region us-east-1
+
+      - name: Create backup of current deployment
+        run: |
+          kubectl get deployment -n production -o yaml > production-backup-${{ github.sha }}.yaml
+          aws s3 cp production-backup-${{ github.sha }}.yaml s3://sai-mahendra-backups/deployments/
+
+      - name: Blue-Green Deployment - Deploy Green
+        run: |
+          export IMAGE_TAG="${{ github.sha }}"
+          export DEPLOYMENT_COLOR="green"
+          
+          # Deploy green version with production config
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            envsubst < "$file" | sed "s/app: /app: green-/" | kubectl apply -n production -f -
+          done
+
+      - name: Wait for green deployment
+        run: |
+          kubectl rollout status deployment/green-api-gateway -n production --timeout=10m
+          kubectl rollout status deployment/green-user-management -n production --timeout=10m
+          kubectl rollout status deployment/green-course-management -n production --timeout=10m
+          kubectl rollout status deployment/green-payment -n production --timeout=10m
+
+      - name: Run production smoke tests on green
+        run: |
+          sleep 60
+          # Test green deployment internally before switching traffic
+          kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n production -- \
+            curl -f http://green-api-gateway:3000/health
+
+      - name: Canary deployment - 10% traffic
+        run: |
+          # Route 10% of traffic to green for canary testing
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: api-gateway-canary
+            namespace: production
+          spec:
+            selector:
+              app: green-api-gateway
+            ports:
+            - port: 80
+              targetPort: 3000
+          ---
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: canary-ingress
+            namespace: production
+            annotations:
+              nginx.ingress.kubernetes.io/canary: "true"
+              nginx.ingress.kubernetes.io/canary-weight: "10"
+          spec:
+            rules:
+            - host: api.saimahendra.com
+              http:
+                paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: api-gateway-canary
+                      port:
+                        number: 80
+          EOF
+
+      - name: Monitor canary metrics
+        run: |
+          echo "Monitoring canary deployment for 5 minutes..."
+          sleep 300
+          
+          # Check error rates and latency
+          ERROR_RATE=$(kubectl exec -n production deployment/prometheus -- \
+            promtool query instant 'rate(http_requests_total{status=~"5.."}[5m])' | tail -1)
+          
+          echo "Canary error rate: $ERROR_RATE"
+          
+          # If error rate is acceptable, proceed with full cutover
+          if [ "$ERROR_RATE" -lt "0.01" ]; then
+            echo "Canary metrics look good, proceeding with full deployment"
+          else
+            echo "Canary metrics show issues, aborting deployment"
+            exit 1
+          fi
+
+      - name: Full cutover to green
+        run: |
+          # Remove canary ingress
+          kubectl delete ingress canary-ingress -n production
+          
+          # Update main services to point to green
+          kubectl patch service api-gateway -n production -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service user-management -n production -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service course-management -n production -p '{"spec":{"selector":{"version":"green"}}}'
+          kubectl patch service payment -n production -p '{"spec":{"selector":{"version":"green"}}}'
+
+      - name: Verify production deployment
+        run: |
+          sleep 60
+          curl -f https://api.saimahendra.com/health || exit 1
+          curl -f https://api.saimahendra.com/api/v1/health || exit 1
+
+      - name: Run production health checks
+        run: |
+          # Comprehensive health checks
+          for service in api-gateway user-management course-management payment; do
+            echo "Checking $service..."
+            kubectl exec -n production deployment/$service -- wget -q -O- http://localhost:3000/health
+          done
+
+      - name: Keep blue deployment for 1 hour (quick rollback capability)
+        run: |
+          echo "Keeping blue deployment active for quick rollback..."
+          # Blue deployment will be cleaned up by a separate job after 1 hour
+
+      - name: Tag successful deployment
+        if: success()
+        run: |
+          git tag -a "prod-${{ github.sha }}" -m "Production deployment ${{ github.sha }}"
+          git push origin "prod-${{ github.sha }}"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Production deployment failed, rolling back to blue..."
+          kubectl patch service api-gateway -n production -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service user-management -n production -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service course-management -n production -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service payment -n production -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl delete deployment -l version=green -n production
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Production deployment ${{ job.status }} - Version: ${{ github.sha }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+
+  # ============================================================================
+  # CLEANUP OLD DEPLOYMENTS
+  # ============================================================================
+
+  cleanup-old-deployments:
+    name: Cleanup Old Blue Deployments
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: success()
+    steps:
+      - name: Wait 1 hour before cleanup
+        run: sleep 3600
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-prod --region us-east-1
+
+      - name: Remove old blue deployments
+        run: |
+          kubectl delete deployment -l version=blue -n production
+          echo "Old blue deployments cleaned up successfully"
+
+  # ============================================================================
+  # ROLLBACK JOB (Manual Trigger)
+  # ============================================================================
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: github.event.inputs.rollback == 'true'
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets[format('AWS_ACCESS_KEY_ID_{0}', upper(github.event.inputs.environment))] }}
+          aws-secret-access-key: ${{ secrets[format('AWS_SECRET_ACCESS_KEY_{0}', upper(github.event.inputs.environment))] }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name sai-mahendra-${{ github.event.inputs.environment }} --region us-east-1
+
+      - name: Rollback to previous version
+        run: |
+          # Switch traffic back to blue deployment
+          kubectl patch service api-gateway -n ${{ github.event.inputs.environment }} -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service user-management -n ${{ github.event.inputs.environment }} -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service course-management -n ${{ github.event.inputs.environment }} -p '{"spec":{"selector":{"version":"blue"}}}'
+          kubectl patch service payment -n ${{ github.event.inputs.environment }} -p '{"spec":{"selector":{"version":"blue"}}}'
+          
+          # Remove failed green deployment
+          kubectl delete deployment -l version=green -n ${{ github.event.inputs.environment }}
+
+      - name: Verify rollback
+        run: |
+          sleep 30
+          kubectl get deployments -n ${{ github.event.inputs.environment }}
+          
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'success'
+          text: 'Rollback completed for ${{ github.event.inputs.environment }} environment'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}

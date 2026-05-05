@@ -1,0 +1,310 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-config
+  namespace: backup
+data:
+  # Backup configuration
+  BACKUP_SCHEDULE: "0 2 * * *"  # Daily at 2:00 AM UTC
+  BACKUP_RETENTION_DAYS: "30"
+  WAL_RETENTION_DAYS: "7"
+  BACKUP_COMPRESSION: "gzip"
+  BACKUP_ENCRYPTION: "true"
+  
+  # S3 configuration
+  S3_BACKUP_BUCKET: "sai-mahendra-backups"
+  S3_BACKUP_PREFIX: "postgres"
+  S3_REGION: "us-east-1"
+  
+  # PostgreSQL configuration
+  PGHOST: "postgres-primary.database.svc.cluster.local"
+  PGPORT: "5432"
+  PGDATABASE: "sai_mahendra_prod"
+  
+  # Point-in-time recovery configuration
+  WAL_ARCHIVE_ENABLED: "true"
+  WAL_ARCHIVE_BUCKET: "sai-mahendra-wal-archives"
+  WAL_ARCHIVE_PREFIX: "postgres-wal"
+  
+  # Backup verification
+  VERIFY_BACKUP: "true"
+  BACKUP_CHECKSUM: "sha256"
+  
+  # Notification configuration
+  NOTIFY_ON_SUCCESS: "false"
+  NOTIFY_ON_FAILURE: "true"
+  SLACK_WEBHOOK_URL: ""
+  
+  backup.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Load environment variables
+    source /config/env
+    
+    # Set timestamp
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="postgres_backup_${TIMESTAMP}.sql.gz"
+    
+    echo "Starting PostgreSQL backup at $(date)"
+    
+    # Create backup directory
+    mkdir -p /tmp/backup
+    
+    # Perform pg_basebackup for full backup
+    echo "Creating base backup..."
+    pg_basebackup -h ${PGHOST} -p ${PGPORT} -U ${PGUSER} -D /tmp/backup/base -Ft -z -P
+    
+    # Create logical backup with pg_dump
+    echo "Creating logical backup..."
+    pg_dump -h ${PGHOST} -p ${PGPORT} -U ${PGUSER} -d ${PGDATABASE} \
+      --format=custom --compress=9 --verbose \
+      --file=/tmp/backup/${BACKUP_FILE}
+    
+    # Calculate checksum
+    echo "Calculating checksum..."
+    sha256sum /tmp/backup/${BACKUP_FILE} > /tmp/backup/${BACKUP_FILE}.sha256
+    
+    # Encrypt backup if enabled
+    if [ "${BACKUP_ENCRYPTION}" = "true" ]; then
+      echo "Encrypting backup..."
+      aws kms encrypt \
+        --key-id alias/sai-mahendra-backup-key \
+        --plaintext fileb:///tmp/backup/${BACKUP_FILE} \
+        --output text --query CiphertextBlob \
+        | base64 -d > /tmp/backup/${BACKUP_FILE}.encrypted
+      mv /tmp/backup/${BACKUP_FILE}.encrypted /tmp/backup/${BACKUP_FILE}
+    fi
+    
+    # Upload to S3
+    echo "Uploading backup to S3..."
+    aws s3 cp /tmp/backup/${BACKUP_FILE} \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/${BACKUP_FILE} \
+      --storage-class STANDARD
+    
+    aws s3 cp /tmp/backup/${BACKUP_FILE}.sha256 \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/${BACKUP_FILE}.sha256
+    
+    # Upload base backup
+    echo "Uploading base backup..."
+    tar -czf /tmp/backup/base.tar.gz -C /tmp/backup/base .
+    aws s3 cp /tmp/backup/base.tar.gz \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/base.tar.gz
+    
+    # Verify backup
+    if [ "${VERIFY_BACKUP}" = "true" ]; then
+      echo "Verifying backup..."
+      aws s3api head-object \
+        --bucket ${S3_BACKUP_BUCKET} \
+        --key ${S3_BACKUP_PREFIX}/${TIMESTAMP}/${BACKUP_FILE}
+    fi
+    
+    # Cleanup old backups
+    echo "Cleaning up old backups..."
+    RETENTION_DATE=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d)
+    aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/ | \
+      awk '{print $2}' | \
+      while read prefix; do
+        backup_date=$(echo $prefix | cut -d'_' -f3 | cut -d'/' -f1)
+        if [ "$backup_date" -lt "$RETENTION_DATE" ]; then
+          echo "Deleting old backup: $prefix"
+          aws s3 rm s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${prefix} --recursive
+        fi
+      done
+    
+    # Cleanup local files
+    rm -rf /tmp/backup
+    
+    echo "Backup completed successfully at $(date)"
+    
+    # Send success notification if enabled
+    if [ "${NOTIFY_ON_SUCCESS}" = "true" ] && [ -n "${SLACK_WEBHOOK_URL}" ]; then
+      curl -X POST ${SLACK_WEBHOOK_URL} \
+        -H 'Content-Type: application/json' \
+        -d "{\"text\":\"PostgreSQL backup completed successfully: ${BACKUP_FILE}\"}"
+    fi
+  
+  wal-archive.sh: |
+    #!/bin/bash
+    set -e
+    
+    # WAL archiving script for continuous backup
+    # This script is called by PostgreSQL for each WAL segment
+    
+    WAL_FILE=$1
+    WAL_PATH=$2
+    
+    if [ -z "$WAL_FILE" ] || [ -z "$WAL_PATH" ]; then
+      echo "Usage: wal-archive.sh <wal_file> <wal_path>"
+      exit 1
+    fi
+    
+    echo "Archiving WAL file: ${WAL_FILE}"
+    
+    # Compress WAL file
+    gzip -c ${WAL_PATH} > /tmp/${WAL_FILE}.gz
+    
+    # Upload to S3
+    aws s3 cp /tmp/${WAL_FILE}.gz \
+      s3://${WAL_ARCHIVE_BUCKET}/${WAL_ARCHIVE_PREFIX}/${WAL_FILE}.gz \
+      --storage-class STANDARD_IA
+    
+    # Verify upload
+    if aws s3api head-object \
+      --bucket ${WAL_ARCHIVE_BUCKET} \
+      --key ${WAL_ARCHIVE_PREFIX}/${WAL_FILE}.gz > /dev/null 2>&1; then
+      echo "WAL file archived successfully: ${WAL_FILE}"
+      rm -f /tmp/${WAL_FILE}.gz
+      exit 0
+    else
+      echo "Failed to archive WAL file: ${WAL_FILE}"
+      rm -f /tmp/${WAL_FILE}.gz
+      exit 1
+    fi
+  
+  cleanup-wal.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Cleanup old WAL archives
+    echo "Cleaning up old WAL archives..."
+    
+    RETENTION_DATE=$(date -d "${WAL_RETENTION_DAYS} days ago" +%s)
+    
+    aws s3api list-objects-v2 \
+      --bucket ${WAL_ARCHIVE_BUCKET} \
+      --prefix ${WAL_ARCHIVE_PREFIX}/ \
+      --query 'Contents[].{Key:Key,LastModified:LastModified}' \
+      --output json | \
+      jq -r '.[] | select(.LastModified | fromdateiso8601 < '${RETENTION_DATE}') | .Key' | \
+      while read key; do
+        echo "Deleting old WAL archive: $key"
+        aws s3 rm s3://${WAL_ARCHIVE_BUCKET}/${key}
+      done
+    
+    echo "WAL cleanup completed"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-backup-credentials
+  namespace: backup
+type: Opaque
+stringData:
+  PGUSER: "postgres"
+  PGPASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  AWS_ACCESS_KEY_ID: "CHANGE_ME"
+  AWS_SECRET_ACCESS_KEY: "CHANGE_ME"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2:00 AM UTC
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: backup-service-account
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            command: ["/bin/bash", "/scripts/backup.sh"]
+            env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: PGPASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            envFrom:
+            - configMapRef:
+                name: postgres-backup-config
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /backup
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+          volumes:
+          - name: scripts
+            configMap:
+              name: postgres-backup-config
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-wal-cleanup
+  namespace: backup
+spec:
+  schedule: "0 4 * * *"  # Daily at 4:00 AM UTC
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgres-wal-cleanup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: backup-service-account
+          containers:
+          - name: cleanup
+            image: amazon/aws-cli:latest
+            command: ["/bin/bash", "/scripts/cleanup-wal.sh"]
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            envFrom:
+            - configMapRef:
+                name: postgres-backup-config
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: postgres-backup-config
+              defaultMode: 0755

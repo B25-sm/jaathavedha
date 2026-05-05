@@ -1,0 +1,571 @@
+{
+  "dashboard": {
+    "title": "Business Metrics - Enrollment & Revenue",
+    "tags": ["business", "enrollment", "revenue", "sai-mahendra"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Enrollment Overview",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+        "collapsed": false
+      },
+      {
+        "id": 2,
+        "title": "Daily Enrollments",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+        "targets": [
+          {
+            "expr": "business:enrollment_rate:daily",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "auto",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Weekly Enrollments",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+        "targets": [
+          {
+            "expr": "business:enrollment_rate:weekly",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 30, "color": "yellow"},
+                {"value": 50, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Monthly Enrollments",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+        "targets": [
+          {
+            "expr": "business:enrollment_rate:monthly",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 100, "color": "yellow"},
+                {"value": 200, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Active Enrollments",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+        "targets": [
+          {
+            "expr": "sum(business:active_enrollments:current)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "blue"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Enrollment Trend (Last 30 Days)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+        "targets": [
+          {
+            "expr": "sum(increase(course_enrollments_total[1d]))",
+            "legendFormat": "Daily Enrollments",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Enrollments"},
+          {"format": "short"}
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "lines": true,
+        "fill": 2,
+        "linewidth": 2,
+        "points": false
+      },
+      {
+        "id": 7,
+        "title": "Enrollments by Program",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+        "targets": [
+          {
+            "expr": "sum(business:enrollment_rate_by_program:1h) by (program_name)",
+            "legendFormat": "{{program_name}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "values": ["value", "percent"]
+          },
+          "pieType": "donut"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Program Performance",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13},
+        "targets": [
+          {
+            "expr": "business:active_enrollments:current",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "expr": "business:completion_rate_by_program:7d",
+            "format": "table",
+            "instant": true,
+            "refId": "B"
+          },
+          {
+            "expr": "business:avg_completion_time_days:7d",
+            "format": "table",
+            "instant": true,
+            "refId": "C"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "program_name": "Program",
+                "Value #A": "Active Enrollments",
+                "Value #B": "Completion Rate (%)",
+                "Value #C": "Avg Completion Time (days)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Revenue Overview",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21},
+        "collapsed": false
+      },
+      {
+        "id": 10,
+        "title": "Daily Revenue",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 22},
+        "targets": [
+          {
+            "expr": "business:revenue:daily",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 10000, "color": "yellow"},
+                {"value": 50000, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Weekly Revenue",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 22},
+        "targets": [
+          {
+            "expr": "business:revenue:weekly",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 50000, "color": "yellow"},
+                {"value": 200000, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Monthly Revenue",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 22},
+        "targets": [
+          {
+            "expr": "business:revenue:monthly",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 200000, "color": "yellow"},
+                {"value": 1000000, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 13,
+        "title": "Average Order Value",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 22},
+        "targets": [
+          {
+            "expr": "business:average_order_value:7d",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "decimals": 0,
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "blue"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Revenue Trend (Last 30 Days)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
+        "targets": [
+          {
+            "expr": "sum(increase(payment_amount_total[1d]))",
+            "legendFormat": "Daily Revenue",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "currencyINR", "label": "Revenue"},
+          {"format": "short"}
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "lines": true,
+        "fill": 2,
+        "linewidth": 2,
+        "bars": false,
+        "stack": false
+      },
+      {
+        "id": 15,
+        "title": "Revenue by Program",
+        "type": "bargauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26},
+        "targets": [
+          {
+            "expr": "topk(5, business:revenue_by_program:daily)",
+            "legendFormat": "{{program_name}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "color": {"mode": "palette-classic"}
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "MRR & ARR",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": 34},
+        "targets": [
+          {
+            "expr": "business:mrr:current",
+            "refId": "A"
+          },
+          {
+            "expr": "business:arr:current",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "horizontal"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR",
+            "decimals": 0
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "A"},
+              "properties": [
+                {"id": "displayName", "value": "MRR"}
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "B"},
+              "properties": [
+                {"id": "displayName", "value": "ARR"}
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 17,
+        "title": "Payment Success Rate",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 34},
+        "targets": [
+          {
+            "expr": "business:payment_success_rate:1h",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 90, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 18,
+        "title": "Revenue by Gateway",
+        "type": "piechart",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 34},
+        "targets": [
+          {
+            "expr": "business:revenue_by_gateway:daily",
+            "legendFormat": "{{gateway}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "pieType": "pie"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyINR"
+          }
+        }
+      },
+      {
+        "id": 19,
+        "title": "Payment Failure Rate by Gateway",
+        "type": "table",
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 38},
+        "targets": [
+          {
+            "expr": "business:payment_failure_rate_by_gateway:1h",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "expr": "business:revenue_by_gateway:daily",
+            "format": "table",
+            "instant": true,
+            "refId": "B"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "gateway": "Payment Gateway",
+                "Value #A": "Failure Rate (%)",
+                "Value #B": "Daily Revenue"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Failure Rate (%)"},
+              "properties": [
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "gradient"
+                  }
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"value": 0, "color": "green"},
+                      {"value": 5, "color": "yellow"},
+                      {"value": 10, "color": "red"}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "Daily Revenue"},
+              "properties": [
+                {"id": "unit", "value": "currencyINR"}
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

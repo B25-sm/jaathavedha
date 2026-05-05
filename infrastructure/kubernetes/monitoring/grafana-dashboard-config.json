@@ -1,0 +1,246 @@
+{
+  "dashboard": {
+    "title": "Sai Mahendra Platform - Performance Overview",
+    "tags": ["sai-mahendra", "performance", "overview"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Response Time (95th Percentile)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"sai-mahendra\"}[5m]))",
+            "legendFormat": "{{service}} - p95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{namespace=\"sai-mahendra\"}[5m]))",
+            "legendFormat": "{{service}} - p99",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Response Time"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.2], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High API Response Time",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{namespace=\"sai-mahendra\"}[5m])) by (service)",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{namespace=\"sai-mahendra\",status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total{namespace=\"sai-mahendra\"}[5m])) by (service) * 100",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Error Rate"},
+          {"format": "short"}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [5], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Error Rate",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 4,
+        "title": "CPU Usage (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sai-mahendra\"}[5m])) by (pod) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU Usage"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(container_memory_usage_bytes{namespace=\"sai-mahendra\"}) by (pod) / 1024 / 1024",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "mbytes", "label": "Memory"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Active Pods",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(kube_pod_status_phase{namespace=\"sai-mahendra\",phase=\"Running\"}) by (deployment)",
+            "legendFormat": "{{deployment}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Pods"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Database Connections",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends",
+            "legendFormat": "{{datname}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Connections"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Cache Hit Rate (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) * 100",
+            "legendFormat": "Cache Hit Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Hit Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Payment Success Rate (%)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(rate(payment_transactions_total{status=\"success\"}[1h])) / sum(rate(payment_transactions_total[1h])) * 100",
+            "refId": "A"
+          }
+        ],
+        "format": "percent",
+        "thresholds": "80,90",
+        "colors": ["#d44a3a", "#e0b400", "#299c46"]
+      },
+      {
+        "id": 10,
+        "title": "Active Users (24h)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 32},
+        "targets": [
+          {
+            "expr": "count(count by (user_id) (http_requests_total{namespace=\"sai-mahendra\"}[24h]))",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "thresholds": "100,500",
+        "colors": ["#299c46", "#e0b400", "#299c46"]
+      },
+      {
+        "id": 11,
+        "title": "Enrollments (24h)",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(increase(course_enrollments_total[24h]))",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "thresholds": "10,50",
+        "colors": ["#d44a3a", "#e0b400", "#299c46"]
+      },
+      {
+        "id": 12,
+        "title": "System Uptime",
+        "type": "singlestat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 32},
+        "targets": [
+          {
+            "expr": "avg(up{namespace=\"sai-mahendra\"}) * 100",
+            "refId": "A"
+          }
+        ],
+        "format": "percent",
+        "thresholds": "99,99.9",
+        "colors": ["#d44a3a", "#e0b400", "#299c46"]
+      }
+    ]
+  }
+}

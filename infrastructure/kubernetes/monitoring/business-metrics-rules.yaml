@@ -1,0 +1,393 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: business-metrics-rules
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+spec:
+  groups:
+  # Enrollment Metrics Recording Rules
+  - name: enrollment_metrics
+    interval: 1m
+    rules:
+    # Daily enrollment rate
+    - record: business:enrollment_rate:daily
+      expr: sum(increase(course_enrollments_total[24h]))
+    
+    # Weekly enrollment rate
+    - record: business:enrollment_rate:weekly
+      expr: sum(increase(course_enrollments_total[7d]))
+    
+    # Monthly enrollment rate
+    - record: business:enrollment_rate:monthly
+      expr: sum(increase(course_enrollments_total[30d]))
+    
+    # Enrollment rate by program
+    - record: business:enrollment_rate_by_program:1h
+      expr: sum(rate(course_enrollments_total[1h])) by (program_id, program_name)
+    
+    # Active enrollments
+    - record: business:active_enrollments:current
+      expr: sum(active_enrollments_gauge) by (program_id, program_name)
+    
+    # Completion rate by program
+    - record: business:completion_rate_by_program:7d
+      expr: |
+        sum(increase(course_completions_total[7d])) by (program_id, program_name) 
+        / 
+        sum(increase(course_enrollments_total[7d])) by (program_id, program_name) * 100
+    
+    # Average time to completion
+    - record: business:avg_completion_time_days:7d
+      expr: avg(course_completion_time_days) by (program_id, program_name)
+
+  # Revenue Metrics Recording Rules
+  - name: revenue_metrics
+    interval: 1m
+    rules:
+    # Daily revenue
+    - record: business:revenue:daily
+      expr: sum(increase(payment_amount_total[24h]))
+    
+    # Weekly revenue
+    - record: business:revenue:weekly
+      expr: sum(increase(payment_amount_total[7d]))
+    
+    # Monthly revenue
+    - record: business:revenue:monthly
+      expr: sum(increase(payment_amount_total[30d]))
+    
+    # Monthly Recurring Revenue (MRR)
+    - record: business:mrr:current
+      expr: sum(subscription_mrr_gauge)
+    
+    # Annual Recurring Revenue (ARR)
+    - record: business:arr:current
+      expr: sum(subscription_mrr_gauge) * 12
+    
+    # Revenue by program
+    - record: business:revenue_by_program:daily
+      expr: sum(increase(payment_amount_total[24h])) by (program_id, program_name)
+    
+    # Revenue by gateway
+    - record: business:revenue_by_gateway:daily
+      expr: sum(increase(payment_amount_total{status="completed"}[24h])) by (gateway)
+    
+    # Average order value
+    - record: business:average_order_value:7d
+      expr: |
+        sum(increase(payment_amount_total[7d])) 
+        / 
+        sum(increase(payment_transactions_total{status="completed"}[7d]))
+    
+    # Payment success rate
+    - record: business:payment_success_rate:1h
+      expr: |
+        sum(rate(payment_transactions_total{status="completed"}[1h])) 
+        / 
+        sum(rate(payment_transactions_total[1h])) * 100
+    
+    # Payment failure rate by gateway
+    - record: business:payment_failure_rate_by_gateway:1h
+      expr: |
+        sum(rate(payment_transactions_total{status="failed"}[1h])) by (gateway) 
+        / 
+        sum(rate(payment_transactions_total[1h])) by (gateway) * 100
+
+  # User Engagement Metrics Recording Rules
+  - name: engagement_metrics
+    interval: 1m
+    rules:
+    # Daily Active Users (DAU)
+    - record: business:daily_active_users:current
+      expr: count(count by (user_id) (user_activity_total{timestamp=~".*"}[24h]))
+    
+    # Weekly Active Users (WAU)
+    - record: business:weekly_active_users:current
+      expr: count(count by (user_id) (user_activity_total[7d]))
+    
+    # Monthly Active Users (MAU)
+    - record: business:monthly_active_users:current
+      expr: count(count by (user_id) (user_activity_total[30d]))
+    
+    # DAU/MAU ratio (stickiness)
+    - record: business:user_stickiness:current
+      expr: |
+        count(count by (user_id) (user_activity_total[24h])) 
+        / 
+        count(count by (user_id) (user_activity_total[30d])) * 100
+    
+    # Average session duration
+    - record: business:avg_session_duration_seconds:1h
+      expr: avg(session_duration_seconds) by (service)
+    
+    # Sessions per user
+    - record: business:sessions_per_user:daily
+      expr: |
+        sum(increase(user_sessions_total[24h])) 
+        / 
+        count(count by (user_id) (user_activity_total[24h]))
+    
+    # Page views per session
+    - record: business:page_views_per_session:1h
+      expr: |
+        sum(rate(page_views_total[1h])) 
+        / 
+        sum(rate(user_sessions_total[1h]))
+    
+    # Bounce rate
+    - record: business:bounce_rate:1h
+      expr: |
+        sum(rate(bounced_sessions_total[1h])) 
+        / 
+        sum(rate(user_sessions_total[1h])) * 100
+    
+    # Feature adoption rate
+    - record: business:feature_adoption_rate:7d
+      expr: |
+        count(count by (user_id) (feature_usage_total[7d])) by (feature_name) 
+        / 
+        count(count by (user_id) (user_activity_total[7d])) * 100
+    
+    # Course completion rate
+    - record: business:course_completion_rate:30d
+      expr: |
+        sum(increase(course_completions_total[30d])) 
+        / 
+        sum(increase(course_starts_total[30d])) * 100
+
+  # Retention Metrics Recording Rules
+  - name: retention_metrics
+    interval: 5m
+    rules:
+    # 1-day retention
+    - record: business:user_retention:1d
+      expr: |
+        count(count by (user_id) (user_activity_total{timestamp=~".*"}[24h] offset 24h) 
+        and 
+        user_activity_total{timestamp=~".*"}[24h])
+        /
+        count(count by (user_id) (user_activity_total{timestamp=~".*"}[24h] offset 24h)) * 100
+    
+    # 7-day retention
+    - record: business:user_retention:7d
+      expr: |
+        count(count by (user_id) (user_activity_total[7d] offset 7d) 
+        and 
+        user_activity_total[7d])
+        /
+        count(count by (user_id) (user_activity_total[7d] offset 7d)) * 100
+    
+    # 30-day retention
+    - record: business:user_retention:30d
+      expr: |
+        count(count by (user_id) (user_activity_total[30d] offset 30d) 
+        and 
+        user_activity_total[30d])
+        /
+        count(count by (user_id) (user_activity_total[30d] offset 30d)) * 100
+    
+    # Churn rate (monthly)
+    - record: business:churn_rate:monthly
+      expr: |
+        sum(increase(subscription_cancellations_total[30d])) 
+        / 
+        sum(active_subscriptions_gauge offset 30d) * 100
+    
+    # Customer lifetime (days)
+    - record: business:customer_lifetime_days:avg
+      expr: avg(customer_lifetime_days)
+
+  # Conversion Funnel Metrics Recording Rules
+  - name: conversion_funnel_metrics
+    interval: 1m
+    rules:
+    # Visitor count
+    - record: business:funnel_visitors:1h
+      expr: count(count by (session_id) (page_views_total[1h]))
+    
+    # Signup count
+    - record: business:funnel_signups:1h
+      expr: sum(increase(user_registrations_total[1h]))
+    
+    # Enrollment start count
+    - record: business:funnel_enrollment_starts:1h
+      expr: sum(increase(enrollment_starts_total[1h]))
+    
+    # Payment initiated count
+    - record: business:funnel_payment_initiated:1h
+      expr: sum(increase(payment_initiated_total[1h]))
+    
+    # Payment completed count
+    - record: business:funnel_payment_completed:1h
+      expr: sum(increase(payment_transactions_total{status="completed"}[1h]))
+    
+    # Visitor to signup conversion
+    - record: business:conversion_visitor_to_signup:1h
+      expr: |
+        sum(increase(user_registrations_total[1h])) 
+        / 
+        count(count by (session_id) (page_views_total[1h])) * 100
+    
+    # Signup to enrollment conversion
+    - record: business:conversion_signup_to_enrollment:1h
+      expr: |
+        sum(increase(enrollment_starts_total[1h])) 
+        / 
+        sum(increase(user_registrations_total[1h])) * 100
+    
+    # Enrollment to payment conversion
+    - record: business:conversion_enrollment_to_payment:1h
+      expr: |
+        sum(increase(payment_initiated_total[1h])) 
+        / 
+        sum(increase(enrollment_starts_total[1h])) * 100
+    
+    # Payment success conversion
+    - record: business:conversion_payment_success:1h
+      expr: |
+        sum(increase(payment_transactions_total{status="completed"}[1h])) 
+        / 
+        sum(increase(payment_initiated_total[1h])) * 100
+    
+    # Overall conversion rate (visitor to customer)
+    - record: business:conversion_overall:1h
+      expr: |
+        sum(increase(payment_transactions_total{status="completed"}[1h])) 
+        / 
+        count(count by (session_id) (page_views_total[1h])) * 100
+
+  # Business Alerting Rules
+  - name: business_alerts
+    interval: 1m
+    rules:
+    # Low daily enrollment rate
+    - alert: LowDailyEnrollmentRate
+      expr: business:enrollment_rate:daily < 5
+      for: 2h
+      labels:
+        severity: warning
+        component: business
+        category: enrollment
+      annotations:
+        summary: "Low daily enrollment rate"
+        description: "Only {{ $value }} enrollments in the last 24 hours (threshold: 5)"
+        runbook_url: "https://docs.sai-mahendra.com/runbooks/low-enrollment"
+    
+    # Enrollment rate drop
+    - alert: EnrollmentRateDrop
+      expr: |
+        (business:enrollment_rate:daily - business:enrollment_rate:daily offset 7d) 
+        / business:enrollment_rate:daily offset 7d * 100 < -30
+      for: 1h
+      labels:
+        severity: warning
+        component: business
+        category: enrollment
+      annotations:
+        summary: "Significant enrollment rate drop"
+        description: "Enrollment rate dropped by {{ $value | humanizePercentage }} compared to last week"
+    
+    # Low revenue
+    - alert: LowDailyRevenue
+      expr: business:revenue:daily < 10000
+      for: 4h
+      labels:
+        severity: warning
+        component: business
+        category: revenue
+      annotations:
+        summary: "Low daily revenue"
+        description: "Daily revenue is {{ $value | humanizeCurrency }} (threshold: 10000)"
+    
+    # Revenue drop
+    - alert: RevenueDrop
+      expr: |
+        (business:revenue:daily - business:revenue:daily offset 7d) 
+        / business:revenue:daily offset 7d * 100 < -40
+      for: 2h
+      labels:
+        severity: critical
+        component: business
+        category: revenue
+      annotations:
+        summary: "Significant revenue drop"
+        description: "Revenue dropped by {{ $value | humanizePercentage }} compared to last week"
+    
+    # High payment failure rate
+    - alert: HighPaymentFailureRate
+      expr: 100 - business:payment_success_rate:1h < 90
+      for: 30m
+      labels:
+        severity: critical
+        component: business
+        category: payment
+      annotations:
+        summary: "High payment failure rate"
+        description: "Payment success rate is {{ $value }}% (threshold: 90%)"
+        runbook_url: "https://docs.sai-mahendra.com/runbooks/payment-failures"
+    
+    # Low user engagement (DAU drop)
+    - alert: LowUserEngagement
+      expr: |
+        (business:daily_active_users:current - business:daily_active_users:current offset 7d) 
+        / business:daily_active_users:current offset 7d * 100 < -25
+      for: 2h
+      labels:
+        severity: warning
+        component: business
+        category: engagement
+      annotations:
+        summary: "Low user engagement"
+        description: "Daily active users dropped by {{ $value | humanizePercentage }} compared to last week"
+    
+    # High churn rate
+    - alert: HighChurnRate
+      expr: business:churn_rate:monthly > 10
+      for: 1h
+      labels:
+        severity: warning
+        component: business
+        category: retention
+      annotations:
+        summary: "High monthly churn rate"
+        description: "Monthly churn rate is {{ $value }}% (threshold: 10%)"
+    
+    # Low conversion rate
+    - alert: LowConversionRate
+      expr: business:conversion_overall:1h < 1
+      for: 4h
+      labels:
+        severity: warning
+        component: business
+        category: conversion
+      annotations:
+        summary: "Low overall conversion rate"
+        description: "Overall conversion rate is {{ $value }}% (threshold: 1%)"
+    
+    # Conversion funnel drop-off
+    - alert: HighFunnelDropOff
+      expr: business:conversion_signup_to_enrollment:1h < 30
+      for: 2h
+      labels:
+        severity: warning
+        component: business
+        category: conversion
+      annotations:
+        summary: "High drop-off in enrollment funnel"
+        description: "Only {{ $value }}% of signups are starting enrollment (threshold: 30%)"
+    
+    # MRR decline
+    - alert: MRRDecline
+      expr: |
+        (business:mrr:current - business:mrr:current offset 30d) 
+        / business:mrr:current offset 30d * 100 < -10
+      for: 1h
+      labels:
+        severity: critical
+        component: business
+        category: revenue
+      annotations:
+        summary: "Monthly Recurring Revenue decline"
+        description: "MRR declined by {{ $value | humanizePercentage }} compared to last month"

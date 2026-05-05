@@ -1,0 +1,206 @@
+# Platform Ingress Configuration
+# Routes external traffic to internal services
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sai-mahendra-platform-ingress
+  namespace: sai-mahendra-platform
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://saimahendra.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+spec:
+  tls:
+  - hosts:
+    - api.saimahendra.com
+    - admin.saimahendra.com
+    secretName: sai-mahendra-tls
+  rules:
+  - host: api.saimahendra.com
+    http:
+      paths:
+      # API Gateway - Main entry point
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 3000
+      
+      # User Management Service
+      - path: /api/v1/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: user-management
+            port:
+              number: 3001
+      - path: /api/v1/users
+        pathType: Prefix
+        backend:
+          service:
+            name: user-management
+            port:
+              number: 3001
+      
+      # Course Management Service
+      - path: /api/v1/programs
+        pathType: Prefix
+        backend:
+          service:
+            name: course-management
+            port:
+              number: 3002
+      - path: /api/v1/courses
+        pathType: Prefix
+        backend:
+          service:
+            name: course-management
+            port:
+              number: 3002
+      - path: /api/v1/enrollments
+        pathType: Prefix
+        backend:
+          service:
+            name: course-management
+            port:
+              number: 3002
+      
+      # Payment Service
+      - path: /api/v1/payments
+        pathType: Prefix
+        backend:
+          service:
+            name: payment
+            port:
+              number: 3003
+      - path: /api/v1/subscriptions
+        pathType: Prefix
+        backend:
+          service:
+            name: payment
+            port:
+              number: 3003
+      
+      # Contact Service
+      - path: /api/v1/contact
+        pathType: Prefix
+        backend:
+          service:
+            name: contact
+            port:
+              number: 3004
+      
+      # Content Management Service
+      - path: /api/v1/content
+        pathType: Prefix
+        backend:
+          service:
+            name: content-management
+            port:
+              number: 3005
+      
+      # Analytics Service
+      - path: /api/v1/analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics
+            port:
+              number: 3006
+      
+      # Notification Service
+      - path: /api/v1/notifications
+        pathType: Prefix
+        backend:
+          service:
+            name: notification
+            port:
+              number: 3007
+      
+      # PWA Service
+      - path: /api/v1/pwa
+        pathType: Prefix
+        backend:
+          service:
+            name: pwa
+            port:
+              number: 3009
+      
+      # Video Conferencing Service
+      - path: /api/v1/video-conferencing
+        pathType: Prefix
+        backend:
+          service:
+            name: video-conferencing
+            port:
+              number: 3010
+      
+      # Calendar Integration Service
+      - path: /api/v1/calendar
+        pathType: Prefix
+        backend:
+          service:
+            name: calendar-integration
+            port:
+              number: 3011
+  
+  # Admin Panel
+  - host: admin.saimahendra.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-panel
+            port:
+              number: 3008
+
+---
+# Certificate Issuer for Let's Encrypt
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@saimahendra.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+
+---
+# Certificate Issuer for Let's Encrypt Staging (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@saimahendra.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx

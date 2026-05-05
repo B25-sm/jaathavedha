@@ -1,0 +1,17 @@
+apiVersion: v2
+name: sai-mahendra-platform
+description: A Helm chart for Sai Mahendra Educational Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - education
+  - platform
+  - microservices
+  - kubernetes
+maintainers:
+  - name: Sai Mahendra Team
+    email: admin@saimahendra.com
+home: https://saimahendra.com
+sources:
+  - https://github.com/saimahendra/platform

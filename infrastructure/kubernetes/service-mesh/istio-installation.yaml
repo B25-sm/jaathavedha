@@ -1,0 +1,216 @@
+# Istio Service Mesh Installation Configuration
+# This file contains the Istio operator configuration for service mesh deployment
+
+---
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  namespace: istio-system
+  name: sai-mahendra-istio
+spec:
+  profile: production
+  
+  # Mesh Configuration
+  meshConfig:
+    accessLogFile: /dev/stdout
+    accessLogEncoding: JSON
+    enableTracing: true
+    defaultConfig:
+      tracing:
+        sampling: 100.0
+        zipkin:
+          address: jaeger-collector.sai-mahendra-monitoring:9411
+      holdApplicationUntilProxyStarts: true
+    
+    # Enable automatic mTLS
+    enableAutoMtls: true
+    
+    # Outbound traffic policy
+    outboundTrafficPolicy:
+      mode: REGISTRY_ONLY
+  
+  # Components Configuration
+  components:
+    # Ingress Gateway
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: true
+      k8s:
+        replicas: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        service:
+          type: LoadBalancer
+          ports:
+          - port: 80
+            targetPort: 8080
+            name: http2
+          - port: 443
+            targetPort: 8443
+            name: https
+          - port: 15021
+            targetPort: 15021
+            name: status-port
+        hpaSpec:
+          minReplicas: 3
+          maxReplicas: 10
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+    
+    # Egress Gateway
+    egressGateways:
+    - name: istio-egressgateway
+      enabled: true
+      k8s:
+        replicas: 2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+    
+    # Pilot (Istiod)
+    pilot:
+      enabled: true
+      k8s:
+        replicas: 2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2048Mi
+          limits:
+            cpu: 1000m
+            memory: 4096Mi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 80
+  
+  # Values Configuration
+  values:
+    global:
+      # Proxy configuration
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Logging level
+        logLevel: warning
+        
+        # Component log level
+        componentLogLevel: "misc:error"
+      
+      # Tracing configuration
+      tracer:
+        zipkin:
+          address: jaeger-collector.sai-mahendra-monitoring:9411
+    
+    # Telemetry configuration
+    telemetry:
+      enabled: true
+      v2:
+        enabled: true
+        prometheus:
+          enabled: true
+    
+    # Kiali dashboard
+    kiali:
+      enabled: true
+      dashboard:
+        viewOnlyMode: false
+    
+    # Grafana
+    grafana:
+      enabled: false  # Using existing Grafana from monitoring stack
+    
+    # Prometheus
+    prometheus:
+      enabled: false  # Using existing Prometheus from monitoring stack
+
+---
+# Namespace label for automatic sidecar injection
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sai-mahendra-platform
+  labels:
+    istio-injection: enabled
+    name: sai-mahendra-platform
+
+---
+# Peer Authentication - Enable mTLS for all services
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: sai-mahendra-platform
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Authorization Policy - Default deny all
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: sai-mahendra-platform
+spec:
+  {}
+
+---
+# Authorization Policy - Allow ingress gateway
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-ingress
+  namespace: sai-mahendra-platform
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        namespaces: ["istio-system"]
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+
+---
+# Authorization Policy - Allow inter-service communication
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-inter-service
+  namespace: sai-mahendra-platform
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        namespaces: ["sai-mahendra-platform"]
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]

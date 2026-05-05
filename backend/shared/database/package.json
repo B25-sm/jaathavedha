@@ -1,0 +1,25 @@
+{
+  "name": "@sai-mahendra/database",
+  "version": "1.0.0",
+  "description": "Shared database utilities and connection management for Sai Mahendra Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "jest"
+  },
+  "dependencies": {
+    "pg": "^8.11.3",
+    "redis": "^4.6.10",
+    "mongodb": "^6.3.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.9",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "@sai-mahendra/utils": "^1.0.0"
+  }
+}

@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-panel
+  namespace: sai-mahendra-platform
+  labels:
+    app: admin-panel
+    tier: backend
+    component: admin
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-panel
+  template:
+    metadata:
+      labels:
+        app: admin-panel
+        tier: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3008"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: admin-panel-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: admin-panel
+        image: sai-mahendra/admin-panel:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3008
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: admin-panel-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3008"
+        - name: USER_MANAGEMENT_URL
+          value: "http://user-management:3001"
+        - name: COURSE_MANAGEMENT_URL
+          value: "http://course-management:3002"
+        - name: PAYMENT_URL
+          value: "http://payment:3003"
+        - name: CONTENT_MANAGEMENT_URL
+          value: "http://content-management:3005"
+        - name: ANALYTICS_URL
+          value: "http://analytics:3006"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: admin-panel-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-panel
+  namespace: sai-mahendra-platform
+  labels:
+    app: admin-panel
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3008
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: admin-panel
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-panel-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  AUDIT_LOG_ENABLED: "true"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-panel-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: admin-panel
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-panel-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: admin-panel

@@ -1,0 +1,52 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'sai-mahendra-platform'
+    environment: 'development'
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Application services
+  - job_name: 'services'
+    static_configs:
+      - targets:
+          - 'user-management:3000'
+          - 'course-management:3001'
+          - 'payment:3002'
+          - 'contact:3003'
+          - 'content-management:3004'
+          - 'analytics:3005'
+          - 'notification:3006'
+          - 'api-gateway:3007'
+        labels:
+          environment: 'development'
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # MongoDB
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+
+  # Node Exporter
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

@@ -1,0 +1,352 @@
+name: Security Scanning
+
+on:
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-3.0, AGPL-3.0
+
+  npm-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - user-management
+          - course-management
+          - payment
+          - contact
+          - content-management
+          - analytics
+          - notification
+          - admin-panel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Run npm audit
+        run: |
+          cd backend/services/${{ matrix.service }}
+          npm audit --audit-level=moderate --json > audit-report.json || true
+          
+      - name: Upload audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-audit-${{ matrix.service }}
+          path: backend/services/${{ matrix.service }}/audit-report.json
+
+      - name: Check for critical vulnerabilities
+        run: |
+          cd backend/services/${{ matrix.service }}
+          CRITICAL=$(jq '.metadata.vulnerabilities.critical' audit-report.json)
+          HIGH=$(jq '.metadata.vulnerabilities.high' audit-report.json)
+          
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 5 ]; then
+            echo "Found $CRITICAL critical and $HIGH high vulnerabilities"
+            exit 1
+          fi
+
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --all-projects --severity-threshold=high
+
+      - name: Upload Snyk results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+
+  trivy-scan:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'typescript' ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  semgrep-scan:
+    name: Semgrep Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/nodejs
+          generateSarif: true
+
+      - name: Upload Semgrep results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  docker-security:
+    name: Docker Image Security
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, user-management, course-management, payment]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ matrix.service }}:scan \
+            -f backend/services/${{ matrix.service }}/Dockerfile.dev \
+            backend/services/${{ matrix.service }}
+
+      - name: Run Trivy on Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:scan
+          format: 'sarif'
+          output: 'trivy-docker-${{ matrix.service }}.sarif'
+
+      - name: Upload Trivy Docker results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-docker-${{ matrix.service }}.sarif
+          category: trivy-docker-${{ matrix.service }}
+
+      - name: Run Dockle
+        uses: erzz/dockle-action@v1
+        with:
+          image: ${{ matrix.service }}:scan
+          exit-code: 1
+          exit-level: WARN
+
+  infrastructure-security:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: false
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infrastructure/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+      - name: Run kube-score
+        run: |
+          wget https://github.com/zegl/kube-score/releases/download/v1.17.0/kube-score_1.17.0_linux_amd64 -O kube-score
+          chmod +x kube-score
+          
+          for file in infrastructure/kubernetes/deployments/*.yaml; do
+            echo "Scanning $file"
+            ./kube-score score "$file" || true
+          done
+
+  compliance-check:
+    name: Compliance Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for PCI DSS compliance
+        run: |
+          echo "Checking PCI DSS compliance requirements..."
+          # Check for encryption in payment service
+          grep -r "encrypt" backend/services/payment/ || echo "Warning: No encryption found in payment service"
+          
+          # Check for secure headers
+          grep -r "helmet" backend/services/ || echo "Warning: Security headers middleware not found"
+
+      - name: Check for GDPR compliance
+        run: |
+          echo "Checking GDPR compliance requirements..."
+          # Check for data export functionality
+          grep -r "export.*data" backend/services/user-management/ || echo "Warning: Data export not found"
+          
+          # Check for data deletion
+          grep -r "delete.*user.*data" backend/services/ || echo "Warning: Data deletion not found"
+
+      - name: Check for OWASP Top 10
+        run: |
+          echo "Checking OWASP Top 10 security practices..."
+          # Check for SQL injection prevention
+          grep -r "parameterized\|prepared" backend/services/ || echo "Warning: Parameterized queries not found"
+          
+          # Check for XSS prevention
+          grep -r "sanitize\|escape" backend/services/ || echo "Warning: Input sanitization not found"
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: 
+      - npm-audit
+      - snyk-scan
+      - trivy-scan
+      - codeql-analysis
+      - secret-scanning
+      - docker-security
+      - infrastructure-security
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate consolidated report
+        run: |
+          echo "# Security Scan Report" > security-report.md
+          echo "Generated: $(date)" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Summary" >> security-report.md
+          echo "- NPM Audit: ${{ needs.npm-audit.result }}" >> security-report.md
+          echo "- Snyk Scan: ${{ needs.snyk-scan.result }}" >> security-report.md
+          echo "- Trivy Scan: ${{ needs.trivy-scan.result }}" >> security-report.md
+          echo "- CodeQL: ${{ needs.codeql-analysis.result }}" >> security-report.md
+          echo "- Secret Scanning: ${{ needs.secret-scanning.result }}" >> security-report.md
+          echo "- Docker Security: ${{ needs.docker-security.result }}" >> security-report.md
+          echo "- Infrastructure Security: ${{ needs.infrastructure-security.result }}" >> security-report.md
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.md
+
+      - name: Create issue if vulnerabilities found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🔒 Security vulnerabilities detected',
+              body: 'Security scan found vulnerabilities. Please review the security report artifact.',
+              labels: ['security', 'high-priority']
+            });

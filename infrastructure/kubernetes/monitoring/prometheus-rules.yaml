@@ -1,0 +1,224 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sai-mahendra-alerts
+  namespace: sai-mahendra
+  labels:
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: performance
+    interval: 30s
+    rules:
+    # High API response time
+    - alert: HighAPIResponseTime
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.2
+      for: 5m
+      labels:
+        severity: warning
+        component: api
+      annotations:
+        summary: "High API response time detected"
+        description: "95th percentile response time is {{ $value }}s (threshold: 0.2s)"
+    
+    # Very high API response time
+    - alert: VeryHighAPIResponseTime
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.0
+      for: 2m
+      labels:
+        severity: critical
+        component: api
+      annotations:
+        summary: "Very high API response time detected"
+        description: "95th percentile response time is {{ $value }}s (threshold: 1.0s)"
+    
+    # High error rate
+    - alert: HighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: api
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+    
+    # Critical error rate
+    - alert: CriticalErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.10
+      for: 2m
+      labels:
+        severity: critical
+        component: api
+      annotations:
+        summary: "Critical error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+
+  - name: resources
+    interval: 30s
+    rules:
+    # High CPU usage
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{namespace="sai-mahendra"}[5m]) > 0.8
+      for: 10m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High CPU usage detected"
+        description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}"
+    
+    # High memory usage
+    - alert: HighMemoryUsage
+      expr: container_memory_usage_bytes{namespace="sai-mahendra"} / container_spec_memory_limit_bytes{namespace="sai-mahendra"} > 0.85
+      for: 10m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"
+    
+    # Pod restart rate
+    - alert: HighPodRestartRate
+      expr: rate(kube_pod_container_status_restarts_total{namespace="sai-mahendra"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High pod restart rate"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+
+  - name: availability
+    interval: 30s
+    rules:
+    # Service down
+    - alert: ServiceDown
+      expr: up{namespace="sai-mahendra"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: availability
+      annotations:
+        summary: "Service is down"
+        description: "Service {{ $labels.job }} is down"
+    
+    # Low replica count
+    - alert: LowReplicaCount
+      expr: kube_deployment_status_replicas_available{namespace="sai-mahendra"} < kube_deployment_spec_replicas{namespace="sai-mahendra"} * 0.5
+      for: 5m
+      labels:
+        severity: warning
+        component: availability
+      annotations:
+        summary: "Low replica count"
+        description: "Deployment {{ $labels.deployment }} has only {{ $value }} replicas available"
+    
+    # No replicas available
+    - alert: NoReplicasAvailable
+      expr: kube_deployment_status_replicas_available{namespace="sai-mahendra"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: availability
+      annotations:
+        summary: "No replicas available"
+        description: "Deployment {{ $labels.deployment }} has no replicas available"
+
+  - name: database
+    interval: 30s
+    rules:
+    # High database connection usage
+    - alert: HighDatabaseConnections
+      expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "High database connection usage"
+        description: "Database connection usage is {{ $value | humanizePercentage }}"
+    
+    # Slow database queries
+    - alert: SlowDatabaseQueries
+      expr: rate(pg_stat_statements_mean_exec_time[5m]) > 1000
+      for: 10m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Slow database queries detected"
+        description: "Average query execution time is {{ $value }}ms"
+    
+    # Database replication lag
+    - alert: DatabaseReplicationLag
+      expr: pg_replication_lag > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database replication lag detected"
+        description: "Replication lag is {{ $value }} seconds"
+
+  - name: cache
+    interval: 30s
+    rules:
+    # Low cache hit rate
+    - alert: LowCacheHitRate
+      expr: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) < 0.7
+      for: 10m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "Low cache hit rate"
+        description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 70%)"
+    
+    # High Redis memory usage
+    - alert: HighRedisMemoryUsage
+      expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+      for: 5m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "High Redis memory usage"
+        description: "Redis memory usage is {{ $value | humanizePercentage }}"
+    
+    # Redis connection issues
+    - alert: RedisConnectionIssues
+      expr: redis_connected_clients < 1
+      for: 2m
+      labels:
+        severity: critical
+        component: cache
+      annotations:
+        summary: "Redis connection issues"
+        description: "No clients connected to Redis"
+
+  - name: business
+    interval: 1m
+    rules:
+    # High payment failure rate
+    - alert: HighPaymentFailureRate
+      expr: rate(payment_transactions_total{status="failed"}[10m]) / rate(payment_transactions_total[10m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: business
+      annotations:
+        summary: "High payment failure rate"
+        description: "Payment failure rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+    
+    # Low enrollment rate
+    - alert: LowEnrollmentRate
+      expr: rate(course_enrollments_total[1h]) < 1
+      for: 2h
+      labels:
+        severity: info
+        component: business
+      annotations:
+        summary: "Low enrollment rate"
+        description: "Enrollment rate is {{ $value }} per hour"

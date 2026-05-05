@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar-integration
+  namespace: sai-mahendra-platform
+  labels:
+    app: calendar-integration
+    tier: backend
+    component: calendar
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: calendar-integration
+  template:
+    metadata:
+      labels:
+        app: calendar-integration
+        tier: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3011"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: calendar-integration-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: calendar-integration
+        image: sai-mahendra/calendar-integration:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3011
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: calendar-integration-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3011"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: postgres-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: GOOGLE_CALENDAR_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: google-credentials
+              key: client-id
+        - name: GOOGLE_CALENDAR_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-credentials
+              key: client-secret
+        - name: OUTLOOK_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: outlook-credentials
+              key: client-id
+        - name: OUTLOOK_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: outlook-credentials
+              key: client-secret
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: calendar-integration-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar-integration
+  namespace: sai-mahendra-platform
+  labels:
+    app: calendar-integration
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3011
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: calendar-integration
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calendar-integration-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  SYNC_INTERVAL: "300000"
+  CALENDAR_TIMEZONE: "Asia/Kolkata"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calendar-integration-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: calendar-integration
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: calendar-integration-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: calendar-integration

@@ -1,0 +1,326 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-backup-config
+  namespace: backup
+data:
+  # Backup configuration
+  BACKUP_SCHEDULE: "0 3 * * *"  # Daily at 3:00 AM UTC
+  MONTHLY_BACKUP_SCHEDULE: "0 3 1 * *"  # Monthly on 1st at 3:00 AM
+  BACKUP_RETENTION_DAYS: "30"
+  MONTHLY_RETENTION_DAYS: "90"
+  BACKUP_COMPRESSION: "gzip"
+  
+  # S3 configuration
+  S3_BACKUP_BUCKET: "sai-mahendra-backups"
+  S3_BACKUP_PREFIX: "mongodb"
+  S3_REGION: "us-east-1"
+  
+  # MongoDB configuration
+  MONGO_HOST: "mongodb-primary.database.svc.cluster.local"
+  MONGO_PORT: "27017"
+  MONGO_AUTH_DB: "admin"
+  
+  # Databases to backup
+  DATABASES: "sai_mahendra_content,sai_mahendra_analytics,sai_mahendra_security"
+  
+  # Backup options
+  BACKUP_OPLOG: "true"
+  BACKUP_GZIP: "true"
+  BACKUP_PARALLEL: "4"
+  
+  backup.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Set timestamp
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_DIR="/tmp/mongodb_backup_${TIMESTAMP}"
+    
+    echo "Starting MongoDB backup at $(date)"
+    
+    # Create backup directory
+    mkdir -p ${BACKUP_DIR}
+    
+    # Perform mongodump
+    echo "Creating MongoDB dump..."
+    mongodump \
+      --host=${MONGO_HOST} \
+      --port=${MONGO_PORT} \
+      --username=${MONGO_USER} \
+      --password=${MONGO_PASSWORD} \
+      --authenticationDatabase=${MONGO_AUTH_DB} \
+      --out=${BACKUP_DIR} \
+      --gzip \
+      --oplog \
+      --numParallelCollections=${BACKUP_PARALLEL}
+    
+    # Create metadata file
+    cat > ${BACKUP_DIR}/backup_metadata.json << EOF
+    {
+      "timestamp": "${TIMESTAMP}",
+      "host": "${MONGO_HOST}",
+      "databases": "${DATABASES}",
+      "backup_type": "full",
+      "compression": "gzip",
+      "oplog_included": ${BACKUP_OPLOG}
+    }
+    EOF
+    
+    # Create archive
+    echo "Creating backup archive..."
+    tar -czf /tmp/mongodb_backup_${TIMESTAMP}.tar.gz -C /tmp mongodb_backup_${TIMESTAMP}
+    
+    # Calculate checksum
+    echo "Calculating checksum..."
+    sha256sum /tmp/mongodb_backup_${TIMESTAMP}.tar.gz > /tmp/mongodb_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    # Upload to S3
+    echo "Uploading backup to S3..."
+    
+    # Determine storage class based on backup type
+    if [ "$(date +%d)" = "01" ]; then
+      STORAGE_CLASS="STANDARD"
+      S3_PREFIX="${S3_BACKUP_PREFIX}/monthly/${TIMESTAMP}"
+      echo "Monthly backup - using STANDARD storage"
+    else
+      STORAGE_CLASS="STANDARD_IA"
+      S3_PREFIX="${S3_BACKUP_PREFIX}/daily/${TIMESTAMP}"
+      echo "Daily backup - using STANDARD_IA storage"
+    fi
+    
+    aws s3 cp /tmp/mongodb_backup_${TIMESTAMP}.tar.gz \
+      s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${TIMESTAMP}.tar.gz \
+      --storage-class ${STORAGE_CLASS}
+    
+    aws s3 cp /tmp/mongodb_backup_${TIMESTAMP}.tar.gz.sha256 \
+      s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    # Upload metadata
+    aws s3 cp ${BACKUP_DIR}/backup_metadata.json \
+      s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/backup_metadata.json
+    
+    # Verify backup
+    echo "Verifying backup..."
+    aws s3api head-object \
+      --bucket ${S3_BACKUP_BUCKET} \
+      --key ${S3_PREFIX}/mongodb_backup_${TIMESTAMP}.tar.gz
+    
+    # Get backup size
+    BACKUP_SIZE=$(du -h /tmp/mongodb_backup_${TIMESTAMP}.tar.gz | cut -f1)
+    echo "Backup size: ${BACKUP_SIZE}"
+    
+    # Cleanup old backups
+    echo "Cleaning up old daily backups..."
+    RETENTION_DATE=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d)
+    aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/daily/ | \
+      awk '{print $2}' | \
+      while read prefix; do
+        backup_date=$(echo $prefix | cut -d'_' -f1 | tr -d '/')
+        if [ "$backup_date" -lt "$RETENTION_DATE" ]; then
+          echo "Deleting old daily backup: $prefix"
+          aws s3 rm s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/daily/${prefix} --recursive
+        fi
+      done
+    
+    echo "Cleaning up old monthly backups..."
+    MONTHLY_RETENTION_DATE=$(date -d "${MONTHLY_RETENTION_DAYS} days ago" +%Y%m%d)
+    aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/monthly/ | \
+      awk '{print $2}' | \
+      while read prefix; do
+        backup_date=$(echo $prefix | cut -d'_' -f1 | tr -d '/')
+        if [ "$backup_date" -lt "$MONTHLY_RETENTION_DATE" ]; then
+          echo "Deleting old monthly backup: $prefix"
+          aws s3 rm s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/monthly/${prefix} --recursive
+        fi
+      done
+    
+    # Cleanup local files
+    rm -rf ${BACKUP_DIR}
+    rm -f /tmp/mongodb_backup_${TIMESTAMP}.tar.gz
+    rm -f /tmp/mongodb_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    echo "MongoDB backup completed successfully at $(date)"
+    echo "Backup location: s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/"
+  
+  restore.sh: |
+    #!/bin/bash
+    set -e
+    
+    # MongoDB restore script
+    if [ -z "$1" ]; then
+      echo "Usage: restore.sh <backup-timestamp>"
+      echo "Example: restore.sh 20240115_030000"
+      exit 1
+    fi
+    
+    BACKUP_TIMESTAMP=$1
+    RESTORE_DIR="/tmp/mongodb_restore_${BACKUP_TIMESTAMP}"
+    
+    echo "Starting MongoDB restore from backup: ${BACKUP_TIMESTAMP}"
+    
+    # Check if backup exists in daily or monthly
+    if aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/daily/${BACKUP_TIMESTAMP}/ > /dev/null 2>&1; then
+      S3_PREFIX="${S3_BACKUP_PREFIX}/daily/${BACKUP_TIMESTAMP}"
+    elif aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/monthly/${BACKUP_TIMESTAMP}/ > /dev/null 2>&1; then
+      S3_PREFIX="${S3_BACKUP_PREFIX}/monthly/${BACKUP_TIMESTAMP}"
+    else
+      echo "Error: Backup not found for timestamp ${BACKUP_TIMESTAMP}"
+      exit 1
+    fi
+    
+    # Download backup
+    echo "Downloading backup from S3..."
+    mkdir -p ${RESTORE_DIR}
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz ${RESTORE_DIR}/
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256 ${RESTORE_DIR}/
+    
+    # Verify checksum
+    echo "Verifying backup integrity..."
+    cd ${RESTORE_DIR}
+    sha256sum -c mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256
+    
+    # Extract backup
+    echo "Extracting backup..."
+    tar -xzf mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz
+    
+    # Restore databases
+    echo "Restoring MongoDB databases..."
+    mongorestore \
+      --host=${MONGO_HOST} \
+      --port=${MONGO_PORT} \
+      --username=${MONGO_USER} \
+      --password=${MONGO_PASSWORD} \
+      --authenticationDatabase=${MONGO_AUTH_DB} \
+      --dir=${RESTORE_DIR}/mongodb_backup_${BACKUP_TIMESTAMP} \
+      --gzip \
+      --oplogReplay \
+      --drop \
+      --numParallelCollections=${BACKUP_PARALLEL}
+    
+    # Cleanup
+    rm -rf ${RESTORE_DIR}
+    
+    echo "MongoDB restore completed successfully at $(date)"
+  
+  verify-backup.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Verify backup integrity
+    if [ -z "$1" ]; then
+      echo "Usage: verify-backup.sh <backup-timestamp>"
+      exit 1
+    fi
+    
+    BACKUP_TIMESTAMP=$1
+    
+    echo "Verifying backup: ${BACKUP_TIMESTAMP}"
+    
+    # Check if backup exists
+    if aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/daily/${BACKUP_TIMESTAMP}/ > /dev/null 2>&1; then
+      S3_PREFIX="${S3_BACKUP_PREFIX}/daily/${BACKUP_TIMESTAMP}"
+    elif aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/monthly/${BACKUP_TIMESTAMP}/ > /dev/null 2>&1; then
+      S3_PREFIX="${S3_BACKUP_PREFIX}/monthly/${BACKUP_TIMESTAMP}"
+    else
+      echo "Error: Backup not found"
+      exit 1
+    fi
+    
+    # Download and verify checksum
+    TEMP_DIR="/tmp/verify_${BACKUP_TIMESTAMP}"
+    mkdir -p ${TEMP_DIR}
+    
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz ${TEMP_DIR}/
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_PREFIX}/mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256 ${TEMP_DIR}/
+    
+    cd ${TEMP_DIR}
+    if sha256sum -c mongodb_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256; then
+      echo "✓ Backup integrity verified successfully"
+      rm -rf ${TEMP_DIR}
+      exit 0
+    else
+      echo "✗ Backup integrity check failed"
+      rm -rf ${TEMP_DIR}
+      exit 1
+    fi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-backup-credentials
+  namespace: backup
+type: Opaque
+stringData:
+  MONGO_USER: "admin"
+  MONGO_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  AWS_ACCESS_KEY_ID: "CHANGE_ME"
+  AWS_SECRET_ACCESS_KEY: "CHANGE_ME"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+  namespace: backup
+spec:
+  schedule: "0 3 * * *"  # Daily at 3:00 AM UTC
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: mongodb-backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: backup-service-account
+          containers:
+          - name: backup
+            image: mongo:7
+            command: ["/bin/bash", "/scripts/backup.sh"]
+            env:
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backup-credentials
+                  key: MONGO_USER
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backup-credentials
+                  key: MONGO_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            envFrom:
+            - configMapRef:
+                name: mongodb-backup-config
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /tmp
+            resources:
+              requests:
+                memory: "1Gi"
+                cpu: "500m"
+              limits:
+                memory: "4Gi"
+                cpu: "2000m"
+          volumes:
+          - name: scripts
+            configMap:
+              name: mongodb-backup-config
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 20Gi

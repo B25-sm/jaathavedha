@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-conferencing
+  namespace: sai-mahendra-platform
+  labels:
+    app: video-conferencing
+    tier: backend
+    component: video
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: video-conferencing
+  template:
+    metadata:
+      labels:
+        app: video-conferencing
+        tier: backend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3010"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: video-conferencing-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: video-conferencing
+        image: sai-mahendra/video-conferencing:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3010
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: video-conferencing-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3010"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: postgres-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: ZOOM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: zoom-credentials
+              key: api-key
+        - name: ZOOM_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: zoom-credentials
+              key: api-secret
+        - name: GOOGLE_MEET_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: google-credentials
+              key: client-id
+        - name: GOOGLE_MEET_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: google-credentials
+              key: client-secret
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: video-conferencing-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: video-conferencing
+  namespace: sai-mahendra-platform
+  labels:
+    app: video-conferencing
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3010
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: video-conferencing
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: video-conferencing-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  MAX_PARTICIPANTS: "100"
+  RECORDING_ENABLED: "true"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: video-conferencing-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: video-conferencing
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: video-conferencing-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: video-conferencing

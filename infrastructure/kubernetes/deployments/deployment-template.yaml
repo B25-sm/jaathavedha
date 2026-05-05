@@ -1,0 +1,162 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ SERVICE_NAME }}
+  namespace: sai-mahendra
+  labels:
+    app: {{ SERVICE_NAME }}
+    version: {{ VERSION }}
+    environment: {{ ENVIRONMENT }}
+spec:
+  replicas: {{ REPLICAS }}
+  selector:
+    matchLabels:
+      app: {{ SERVICE_NAME }}
+  template:
+    metadata:
+      labels:
+        app: {{ SERVICE_NAME }}
+        version: {{ VERSION }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ SERVICE_PORT }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ SERVICE_NAME }}-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: {{ SERVICE_NAME }}
+        image: {{ IMAGE_REGISTRY }}/{{ SERVICE_NAME }}:{{ VERSION }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: {{ SERVICE_PORT }}
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "{{ ENVIRONMENT }}"
+        - name: PORT
+          value: "{{ SERVICE_PORT }}"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        # Resource limits and requests
+        resources:
+          requests:
+            memory: "{{ MEMORY_REQUEST }}"
+            cpu: "{{ CPU_REQUEST }}"
+          limits:
+            memory: "{{ MEMORY_LIMIT }}"
+            cpu: "{{ CPU_LIMIT }}"
+        # Liveness probe - checks if container is alive
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        # Readiness probe - checks if container is ready to serve traffic
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        # Startup probe - for slow-starting containers
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+        # Volume mounts
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      # Volumes
+      volumes:
+      - name: config
+        configMap:
+          name: {{ SERVICE_NAME }}-config
+      - name: tmp
+        emptyDir: {}
+      # Pod disruption budget for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ SERVICE_NAME }}
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ SERVICE_NAME }}
+  namespace: sai-mahendra
+  labels:
+    app: {{ SERVICE_NAME }}
+spec:
+  type: ClusterIP
+  ports:
+  - port: {{ SERVICE_PORT }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: {{ SERVICE_NAME }}
+  sessionAffinity: None
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ SERVICE_NAME }}-pdb
+  namespace: sai-mahendra
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: {{ SERVICE_NAME }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ SERVICE_NAME }}-sa
+  namespace: sai-mahendra
+  labels:
+    app: {{ SERVICE_NAME }}

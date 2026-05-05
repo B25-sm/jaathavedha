@@ -1,0 +1,182 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: sai-mahendra-platform
+  labels:
+    app: api-gateway
+    tier: gateway
+    component: gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        tier: gateway
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: api-gateway-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: api-gateway
+        image: sai-mahendra/api-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: api-gateway-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3000"
+        - name: USER_MANAGEMENT_URL
+          value: "http://user-management:3001"
+        - name: COURSE_MANAGEMENT_URL
+          value: "http://course-management:3002"
+        - name: PAYMENT_URL
+          value: "http://payment:3003"
+        - name: CONTACT_URL
+          value: "http://contact:3004"
+        - name: CONTENT_MANAGEMENT_URL
+          value: "http://content-management:3005"
+        - name: ANALYTICS_URL
+          value: "http://analytics:3006"
+        - name: NOTIFICATION_URL
+          value: "http://notification:3007"
+        - name: ADMIN_PANEL_URL
+          value: "http://admin-panel:3008"
+        - name: PWA_URL
+          value: "http://pwa:3009"
+        - name: VIDEO_CONFERENCING_URL
+          value: "http://video-conferencing:3010"
+        - name: CALENDAR_INTEGRATION_URL
+          value: "http://calendar-integration:3011"
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: api-gateway-config
+      - name: tmp
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - api-gateway
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: sai-mahendra-platform
+  labels:
+    app: api-gateway
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: api-gateway
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: sai-mahendra-platform
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  RATE_LIMIT_WINDOW: "900000"
+  RATE_LIMIT_MAX: "100"
+  CORS_ORIGIN: "https://saimahendra.com"
+  API_VERSION: "v1"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-gateway-sa
+  namespace: sai-mahendra-platform
+  labels:
+    app: api-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: sai-mahendra-platform
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api-gateway

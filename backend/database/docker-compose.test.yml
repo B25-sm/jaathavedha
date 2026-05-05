@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: sai-mahendra-postgres-test
+    environment:
+      POSTGRES_DB: sai_mahendra_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongodb-test:
+    image: mongo:6-jammy
+    container_name: sai-mahendra-mongo-test
+    environment:
+      MONGO_INITDB_DATABASE: sai_mahendra_test
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-test-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: sai-mahendra-redis-test
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-test-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-test-data:
+  mongo-test-data:
+  redis-test-data:

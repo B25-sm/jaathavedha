@@ -1,0 +1,33 @@
+:root {
+  --leo-gold: #c9922a;
+  --leo-amber: #e8a83e;
+  --leo-sunlit: #f5c842;
+  --leo-ochre: #9b6e1a;
+  --leo-bronze: #7a4f10;
+
+  --bg-primary: #0d0b07;
+  --bg-card: #161309;
+  --bg-hover: #1f1a0e;
+  --bg-ember: #2a2210;
+
+  --text-primary: #f5edd6;
+  --text-secondary: #d4c49a;
+  --text-muted: #8c7a55;
+
+  --border-gold: rgba(201, 146, 42, 0.25);
+  --border-gold-hover: rgba(201, 146, 42, 0.6);
+  --border-card: rgba(255, 255, 255, 0.06);
+
+  --gradient-gold: linear-gradient(135deg, #c9922a 0%, #f5c842 50%, #e8a83e 100%);
+  --gradient-mane: linear-gradient(180deg, #f5c842 0%, #c9922a 60%, #7a4f10 100%);
+  --gradient-hero: radial-gradient(ellipse at top, #2a2210 0%, #0d0b07 60%);
+  --gradient-card: linear-gradient(145deg, #1f1a0e 0%, #161309 100%);
+
+  --shadow-gold: 0 0 24px rgba(201, 146, 42, 0.3);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 60px rgba(232, 168, 62, 0.15);
+
+  --font-display: "Cinzel", "Playfair Display", Georgia, serif;
+  --font-body: "Inter", "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}

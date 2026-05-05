@@ -1,0 +1,381 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-backup-config
+  namespace: backup
+data:
+  # Backup configuration
+  BACKUP_SCHEDULE: "0 */6 * * *"  # Every 6 hours
+  BACKUP_RETENTION_DAYS: "7"
+  
+  # S3 configuration
+  S3_BACKUP_BUCKET: "sai-mahendra-backups"
+  S3_BACKUP_PREFIX: "redis"
+  S3_REGION: "us-east-1"
+  
+  # Redis configuration
+  REDIS_HOST: "redis-primary.database.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DATA_DIR: "/data"
+  
+  # Redis persistence configuration
+  redis.conf: |
+    # Redis persistence configuration for backup
+    
+    # RDB Snapshots
+    save 900 1      # Save after 900 seconds if at least 1 key changed
+    save 300 10     # Save after 300 seconds if at least 10 keys changed
+    save 60 10000   # Save after 60 seconds if at least 10000 keys changed
+    
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    
+    # AOF (Append Only File) Configuration
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    
+    # Replication
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    
+    # Memory Management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+  
+  backup.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Set timestamp
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_DIR="/tmp/redis_backup_${TIMESTAMP}"
+    
+    echo "Starting Redis backup at $(date)"
+    
+    # Create backup directory
+    mkdir -p ${BACKUP_DIR}
+    
+    # Trigger Redis BGSAVE
+    echo "Triggering Redis BGSAVE..."
+    redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} BGSAVE
+    
+    # Wait for BGSAVE to complete
+    echo "Waiting for BGSAVE to complete..."
+    while [ "$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} LASTSAVE)" = "$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} LASTSAVE)" ]; do
+      sleep 1
+    done
+    
+    # Copy RDB file from Redis pod
+    echo "Copying RDB snapshot..."
+    kubectl cp database/redis-primary-0:${REDIS_DATA_DIR}/dump.rdb ${BACKUP_DIR}/dump.rdb
+    
+    # Copy AOF file if exists
+    if kubectl exec -n database redis-primary-0 -- test -f ${REDIS_DATA_DIR}/appendonly.aof; then
+      echo "Copying AOF file..."
+      kubectl cp database/redis-primary-0:${REDIS_DATA_DIR}/appendonly.aof ${BACKUP_DIR}/appendonly.aof
+    fi
+    
+    # Get Redis INFO for metadata
+    echo "Collecting Redis metadata..."
+    redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} INFO > ${BACKUP_DIR}/redis_info.txt
+    
+    # Create metadata file
+    cat > ${BACKUP_DIR}/backup_metadata.json << EOF
+    {
+      "timestamp": "${TIMESTAMP}",
+      "host": "${REDIS_HOST}",
+      "port": "${REDIS_PORT}",
+      "backup_type": "rdb_aof",
+      "redis_version": "$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} INFO server | grep redis_version | cut -d: -f2 | tr -d '\r')"
+    }
+    EOF
+    
+    # Compress backup
+    echo "Compressing backup..."
+    tar -czf /tmp/redis_backup_${TIMESTAMP}.tar.gz -C /tmp redis_backup_${TIMESTAMP}
+    
+    # Calculate checksum
+    echo "Calculating checksum..."
+    sha256sum /tmp/redis_backup_${TIMESTAMP}.tar.gz > /tmp/redis_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    # Upload to S3
+    echo "Uploading backup to S3..."
+    aws s3 cp /tmp/redis_backup_${TIMESTAMP}.tar.gz \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/redis_backup_${TIMESTAMP}.tar.gz \
+      --storage-class STANDARD_IA
+    
+    aws s3 cp /tmp/redis_backup_${TIMESTAMP}.tar.gz.sha256 \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/redis_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    aws s3 cp ${BACKUP_DIR}/backup_metadata.json \
+      s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${TIMESTAMP}/backup_metadata.json
+    
+    # Verify backup
+    echo "Verifying backup..."
+    aws s3api head-object \
+      --bucket ${S3_BACKUP_BUCKET} \
+      --key ${S3_BACKUP_PREFIX}/${TIMESTAMP}/redis_backup_${TIMESTAMP}.tar.gz
+    
+    # Get backup size
+    BACKUP_SIZE=$(du -h /tmp/redis_backup_${TIMESTAMP}.tar.gz | cut -f1)
+    echo "Backup size: ${BACKUP_SIZE}"
+    
+    # Cleanup old backups
+    echo "Cleaning up old backups..."
+    RETENTION_DATE=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y%m%d)
+    aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/ | \
+      awk '{print $2}' | \
+      while read prefix; do
+        backup_date=$(echo $prefix | cut -d'_' -f1 | tr -d '/')
+        if [ "$backup_date" -lt "$RETENTION_DATE" ]; then
+          echo "Deleting old backup: $prefix"
+          aws s3 rm s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${prefix} --recursive
+        fi
+      done
+    
+    # Cleanup local files
+    rm -rf ${BACKUP_DIR}
+    rm -f /tmp/redis_backup_${TIMESTAMP}.tar.gz
+    rm -f /tmp/redis_backup_${TIMESTAMP}.tar.gz.sha256
+    
+    echo "Redis backup completed successfully at $(date)"
+  
+  restore.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Redis restore script
+    if [ -z "$1" ]; then
+      echo "Usage: restore.sh <backup-timestamp>"
+      echo "Example: restore.sh 20240115_060000"
+      exit 1
+    fi
+    
+    BACKUP_TIMESTAMP=$1
+    RESTORE_DIR="/tmp/redis_restore_${BACKUP_TIMESTAMP}"
+    
+    echo "Starting Redis restore from backup: ${BACKUP_TIMESTAMP}"
+    
+    # Download backup
+    echo "Downloading backup from S3..."
+    mkdir -p ${RESTORE_DIR}
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${BACKUP_TIMESTAMP}/redis_backup_${BACKUP_TIMESTAMP}.tar.gz ${RESTORE_DIR}/
+    aws s3 cp s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/${BACKUP_TIMESTAMP}/redis_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256 ${RESTORE_DIR}/
+    
+    # Verify checksum
+    echo "Verifying backup integrity..."
+    cd ${RESTORE_DIR}
+    sha256sum -c redis_backup_${BACKUP_TIMESTAMP}.tar.gz.sha256
+    
+    # Extract backup
+    echo "Extracting backup..."
+    tar -xzf redis_backup_${BACKUP_TIMESTAMP}.tar.gz
+    
+    # Stop Redis
+    echo "Stopping Redis..."
+    kubectl scale statefulset redis-primary --replicas=0 -n database
+    sleep 10
+    
+    # Copy RDB file to Redis pod
+    echo "Copying RDB file to Redis..."
+    kubectl cp ${RESTORE_DIR}/redis_backup_${BACKUP_TIMESTAMP}/dump.rdb database/redis-primary-0:${REDIS_DATA_DIR}/dump.rdb
+    
+    # Copy AOF file if exists
+    if [ -f ${RESTORE_DIR}/redis_backup_${BACKUP_TIMESTAMP}/appendonly.aof ]; then
+      echo "Copying AOF file to Redis..."
+      kubectl cp ${RESTORE_DIR}/redis_backup_${BACKUP_TIMESTAMP}/appendonly.aof database/redis-primary-0:${REDIS_DATA_DIR}/appendonly.aof
+    fi
+    
+    # Start Redis
+    echo "Starting Redis..."
+    kubectl scale statefulset redis-primary --replicas=1 -n database
+    
+    # Wait for Redis to be ready
+    echo "Waiting for Redis to be ready..."
+    kubectl wait --for=condition=ready pod/redis-primary-0 -n database --timeout=300s
+    
+    # Verify restoration
+    echo "Verifying restoration..."
+    KEYS_COUNT=$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} DBSIZE | cut -d: -f2)
+    echo "Redis keys count: ${KEYS_COUNT}"
+    
+    # Cleanup
+    rm -rf ${RESTORE_DIR}
+    
+    echo "Redis restore completed successfully at $(date)"
+  
+  health-check.sh: |
+    #!/bin/bash
+    
+    # Redis health check and backup verification
+    echo "Redis Backup Health Check"
+    echo "=========================="
+    
+    # Check Redis connectivity
+    if redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} PING > /dev/null 2>&1; then
+      echo "✓ Redis is accessible"
+    else
+      echo "✗ Redis is not accessible"
+      exit 1
+    fi
+    
+    # Check persistence configuration
+    AOF_ENABLED=$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} CONFIG GET appendonly | tail -1)
+    if [ "$AOF_ENABLED" = "yes" ]; then
+      echo "✓ AOF persistence is enabled"
+    else
+      echo "⚠ AOF persistence is disabled"
+    fi
+    
+    # Check last save time
+    LAST_SAVE=$(redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT} -a ${REDIS_PASSWORD} LASTSAVE)
+    CURRENT_TIME=$(date +%s)
+    TIME_DIFF=$((CURRENT_TIME - LAST_SAVE))
+    
+    if [ $TIME_DIFF -lt 21600 ]; then  # 6 hours
+      echo "✓ Last RDB save was ${TIME_DIFF} seconds ago"
+    else
+      echo "⚠ Last RDB save was ${TIME_DIFF} seconds ago (>6 hours)"
+    fi
+    
+    # Check recent backups in S3
+    echo ""
+    echo "Recent backups in S3:"
+    aws s3 ls s3://${S3_BACKUP_BUCKET}/${S3_BACKUP_PREFIX}/ | tail -5
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-backup-credentials
+  namespace: backup
+type: Opaque
+stringData:
+  REDIS_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  AWS_ACCESS_KEY_ID: "CHANGE_ME"
+  AWS_SECRET_ACCESS_KEY: "CHANGE_ME"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: backup
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: redis-backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: backup-service-account
+          containers:
+          - name: backup
+            image: redis:7-alpine
+            command: ["/bin/bash", "/scripts/backup.sh"]
+            env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: REDIS_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            envFrom:
+            - configMapRef:
+                name: redis-backup-config
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: backup-storage
+              mountPath: /tmp
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: scripts
+            configMap:
+              name: redis-backup-config
+              defaultMode: 0755
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-health-check
+  namespace: backup
+spec:
+  schedule: "*/30 * * * *"  # Every 30 minutes
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: redis-health-check
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: backup-service-account
+          containers:
+          - name: health-check
+            image: redis:7-alpine
+            command: ["/bin/bash", "/scripts/health-check.sh"]
+            env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: REDIS_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: redis-backup-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            envFrom:
+            - configMapRef:
+                name: redis-backup-config
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: redis-backup-config
+              defaultMode: 0755

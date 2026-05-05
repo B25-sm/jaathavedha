@@ -1,0 +1,122 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: user-management-circuit-breaker
+  namespace: sai-mahendra
+spec:
+  host: user-management
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 500
+      http:
+        http1MaxPendingRequests: 500
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: course-management-circuit-breaker
+  namespace: sai-mahendra
+spec:
+  host: course-management
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 500
+      http:
+        http1MaxPendingRequests: 500
+        http2MaxRequests: 1000
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: payment-circuit-breaker
+  namespace: sai-mahendra
+spec:
+  host: payment
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 300
+      http:
+        http1MaxPendingRequests: 300
+        http2MaxRequests: 500
+    loadBalancer:
+      simple: ROUND_ROBIN
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 10s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 30
+      minHealthPercent: 70
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: user-management-retry
+  namespace: sai-mahendra
+spec:
+  hosts:
+  - user-management
+  http:
+  - route:
+    - destination:
+        host: user-management
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: course-management-retry
+  namespace: sai-mahendra
+spec:
+  hosts:
+  - course-management
+  http:
+  - route:
+    - destination:
+        host: course-management
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+      retryOn: 5xx,reset,connect-failure
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: payment-retry
+  namespace: sai-mahendra
+spec:
+  hosts:
+  - payment
+  http:
+  - route:
+    - destination:
+        host: payment
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      retryOn: 5xx,reset,connect-failure

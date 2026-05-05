@@ -1,0 +1,55 @@
+{
+  "name": "sai-mahendra-platform-monorepo",
+  "version": "1.0.0",
+  "description": "Sai Mahendra Educational Platform - Full Stack Application",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend/services/*",
+    "backend/shared/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm run test",
+    "test:backend": "cd backend && npm run test",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "k8s:deploy": "kubectl apply -f k8s/",
+    "terraform:init": "cd infrastructure && terraform init",
+    "terraform:plan": "cd infrastructure && terraform plan",
+    "terraform:apply": "cd infrastructure && terraform apply"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sai-mahendra/platform.git"
+  },
+  "keywords": [
+    "education",
+    "platform",
+    "microservices",
+    "react",
+    "nodejs",
+    "typescript"
+  ],
+  "author": "Sai Mahendra Platform Team",
+  "license": "MIT"
+}

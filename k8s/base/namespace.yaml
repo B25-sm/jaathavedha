@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sai-mahendra-platform
+  labels:
+    name: sai-mahendra-platform
+    environment: base
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sai-mahendra-monitoring
+  labels:
+    name: sai-mahendra-monitoring
+    environment: base
